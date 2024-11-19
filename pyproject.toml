@@ -1,0 +1,45 @@
+[project]
+authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
+dependencies = []
+description = "Anywise let you write your application anywise"
+name = "anywise"
+readme = "README.md"
+requires-python = ">= 3.12"
+version = "0.1.0"
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.version]
+path = "anywise/__init__.py"
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.12"
+
+[tool.pixi.feature.publish.dependencies]
+hatch = ">=1.13.0,<2"
+twine = ">=5.1.1,<6"
+
+[tool.pixi.environments]
+default = {solve-group = "default"}
+publish = {features = ["publish"], solve-group = "default"}
+
+#  [tool.pixi.feature.dev.dependencies]
+#  mkdocs-material = ">=9.5.44,<10"
+
+[tool.pixi.feature.test.dependencies]
+pytest = ">=8.3.3"
+pytest-asyncio = ">=0.24.0,<0.25"
+pytest-cov = ">=4.1.0"
+
+[tool.pixi.feature.publish.tasks]
+# Build into a wheel using hatch
+build = {cmd = "hatch build", inputs = ["anywise/*"], outputs = ["dist/*"]}
+publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
+  "build",
+]}
