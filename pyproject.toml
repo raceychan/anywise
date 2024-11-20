@@ -1,11 +1,11 @@
 [project]
-authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
+authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
 dependencies = []
 description = "Anywise let you write your application anywise"
 name = "anywise"
 readme = "README.md"
 requires-python = ">= 3.12"
-version = "0.1.0"
+dynamic = ["version"]
 
 [build-system]
 build-backend = "hatchling.build"
@@ -26,8 +26,8 @@ hatch = ">=1.13.0,<2"
 twine = ">=5.1.1,<6"
 
 [tool.pixi.environments]
-default = {solve-group = "default"}
-publish = {features = ["publish"], solve-group = "default"}
+default = { solve-group = "default" }
+publish = { features = ["publish"], solve-group = "default" }
 
 #  [tool.pixi.feature.dev.dependencies]
 #  mkdocs-material = ">=9.5.44,<10"
@@ -39,7 +39,7 @@ pytest-cov = ">=4.1.0"
 
 [tool.pixi.feature.publish.tasks]
 # Build into a wheel using hatch
-build = {cmd = "hatch build", inputs = ["anywise/*"], outputs = ["dist/*"]}
-publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
+build = { cmd = "hatch build", inputs = ["anywise/*"], outputs = ["dist/*"] }
+publish = { cmd = "twine upload --skip-existing dist/*", depends-on = [
   "build",
-]}
+] }

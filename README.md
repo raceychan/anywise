@@ -1,6 +1,6 @@
 # Anywise
 
-Any wise let you write your application anywise.
+Anywise let you write your application anywise.
 
 ---
 
