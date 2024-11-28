@@ -2,8 +2,7 @@ import typing as ty
 
 from ididi import DependencyGraph
 
-from ._itypes import IHandler
-from ._type_resolve import resolve_handlers
+from ._type_resolve import HandlerMapping, Mark
 
 
 class AnyWise:
@@ -21,23 +20,30 @@ class AnyWise:
         appwise.send(command)
     """
 
-    wises: ty.ClassVar[list["AnyWise"]] = []
-
     def __init__(self):
-        self.wises.append(self)
-        self._handlers: dict[type, IHandler] = {}
+        self._handlers = {}
         self._dg = DependencyGraph()
 
-    def register(self, obj):
-        self._handlers.update(resolve_handlers(obj))
+        self.command_handlers: HandlerMapping[ty.Any] = {}
 
-    def send[T](self, command: T):
-        """Send a command to its registered handler."""
-        try:
-            handler = self._handlers[type(command)]
-        except KeyError:
-            raise ValueError(f"No handler registered for command type {type(command)}")
-        return self._dg.entry(handler)(command)
+    def register(self, mark: Mark[ty.Any]) -> None:
+        self.command_handlers.update(mark.merge_all())
+
+    async def send[R](self, msg: ty.Any) -> ty.Awaitable[R]:
+        """
+        aw.send[CreateUser](command)
+        """
+
+        container = self.command_handlers[type(msg)]
+
+        if (owner_type := container.owner_type) is not None:
+            obj = self._dg.resolve(owner_type)
+            return await container.handler(obj, msg)
+        else:
+            return await container.handler(msg)
+
+    # async def ask(self, msg) -> R: ...
+
+    # async def publish(self, msg) -> R: ...
 
 
-# Example usage:

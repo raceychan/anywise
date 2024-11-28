@@ -1,101 +1,142 @@
 import inspect
-import sys
-import types
 import typing as ty
-from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Tuple, Type
+from collections import defaultdict
 
-from ._itypes import ICommand, IHandler
+# from dataclasses import dataclass
 
-
-@dataclass
-class HanlderInfo:
-    handler: ty.Callable
-    command_type: type
-    handler_type: type | None = None
-
-
-def resolve_from_function(func: IHandler) -> Optional[Tuple[Type[ICommand], Callable]]:
-    """Register a single function as a handler and return the command type and handler pair."""
-    if not inspect.isfunction(func):
-        return None
-
-    sig = inspect.signature(func)
-    for param in sig.parameters.values():
-        param_ant = param.annotation
-        if param_ant is sig.empty:
-            continue
-        if inspect.isclass(param.annotation) and issubclass(param.annotation, ICommand):
-            return (param.annotation, func)
-
-    return None
+# def resolve_from_module(module: types.ModuleType) -> Dict[Type[ICommand], IHandler]:
+#     """Register all classes and functions in a module and return command-handler mapping."""
+#     handlers: HandlersMap = {}
+#     for _, obj in inspect.getmembers(module):
+#         if inspect.isclass(obj) and not issubclass(obj, ICommand):
+#             handlers.update(resolve_from_class(obj))
+#         elif inspect.isfunction(obj):
+#             result = resolve_from_function(obj)
+#             if result:
+#                 command_type, handler = result
+#                 handlers[command_type] = handler
+#     return handlers
 
 
-def resolve_from_class(cls: type) -> Dict[Type[ICommand], Callable]:
-    """Register all methods in a class that handle commands and return command-handler mapping."""
-    handlers = {}
-    for name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
-        result = resolve_from_function(method)
-        if result:
-            command_type, handler = result
-            handlers[command_type] = handler
-    return handlers
+type HandlerMapping[Command] = dict[type[Command], "HandlerNode"]
+type FuncHandler[Command, R] = ty.Callable[[Command], R]
+type MethodHandler[Command, Owner, R] = ty.Callable[[Owner, Command], R]
+type AnyCallable = ty.Callable[..., ty.Any]
 
 
-def resolve_from_module(module: types.ModuleType) -> Dict[Type[ICommand], Callable]:
-    """Register all classes and functions in a module and return command-handler mapping."""
-    handlers = {}
-    for name, obj in inspect.getmembers(module):
-        if inspect.isclass(obj) and not issubclass(obj, ICommand):
-            handlers.update(resolve_from_class(obj))
-        elif inspect.isfunction(obj):
-            result = resolve_from_function(obj)
-            if result:
-                command_type, handler = result
-                handlers[command_type] = handler
-    return handlers
+class HandlerNode:
+    @ty.overload
+    def __init__[C, R](self, command: type[C], handler: FuncHandler[C, R]) -> None: ...
+
+    @ty.overload
+    def __init__[
+        C, O, R
+    ](
+        self, command: type[C], handler: MethodHandler[C, O, R], owner_type: type[O]
+    ) -> None: ...
+
+    def __init__[
+        C, R, O
+    ](
+        self,
+        command: type[C],
+        handler: FuncHandler[C, R] | MethodHandler[C, O, R],
+        owner_type: type[O] | ty.Literal[None] = None,
+    ) -> None:
+        self.command = command
+        self.handler = handler
+        self.owner_type = owner_type
+        # TODO: resolved graph?
 
 
-def resolve_handlers(
-    target: ty.Union[ty.Callable, type, str, object]
-) -> Dict[Type[ICommand], Callable]:
-    """
-    Register handlers from various sources and return command-handler mapping:
-    - Function/method
-    - Class
-    - Module (as string or module object)
-    - Object instance
-    """
-    handlers = {}
+class Mark[Command]:
+    _mark_registry: defaultdict[type[Command], list["Mark[ty.Any]"]] = defaultdict(list)
 
-    if isinstance(target, str):
-        # Register by module name
-        try:
-            module = sys.modules[target]
-            handlers.update(resolve_from_module(module))
-        except KeyError:
-            raise ValueError(f"Module {target} not found")
+    def __init__(self, command: type[Command]):
+        self._command = command
+        self._handlers: HandlerMapping[Command] = {}
+        self._mark_registry[command].append(self)
 
-    elif inspect.ismodule(target):
-        # Register a module object
-        handlers.update(resolve_from_module(target))
+    def _extract_from_function(
+        self, handler: ty.Callable[..., ty.Any], owner_type: type | None = None
+    ) -> HandlerNode | None:
+        sig = inspect.signature(handler)
+        for param in sig.parameters.values():
+            param_type = param.annotation
+            if param_type is sig.empty:
+                continue
+            if issubclass(param_type, self._command):
+                if owner_type:
+                    return HandlerNode(param_type, handler, owner_type)
+                return HandlerNode(param_type, handler)
 
-    elif inspect.isclass(target):
-        # Register a class
-        handlers.update(resolve_from_class(target))
+    def _extract_from_class(self, cls: type) -> HandlerMapping[Command]:
+        handlers: HandlerMapping[Command] = {}
+        for _, method in inspect.getmembers(cls, predicate=inspect.isfunction):
+            sig = inspect.signature(method)
+            for param in sig.parameters.values():
+                param_type = param.annotation
 
-    elif inspect.isfunction(target) or inspect.ismethod(target):
-        # Register a function or method
-        result = resolve_from_function(target)
-        if result:
-            command_type, handler = result
-            handlers[command_type] = handler
+                if param_type is sig.empty:
+                    continue
 
-    elif isinstance(target, object):
-        # Register an instance's methods
-        handlers.update(resolve_from_class(target.__class__))
+                if not issubclass(param_type, self._command):
+                    continue
 
-    else:
-        raise ValueError(f"Cannot register {target} of type {type(target)}")
+                container = HandlerNode(
+                    command=param_type,
+                    handler=method,
+                    owner_type=cls,
+                )
+                handlers[param_type] = container
+        return handlers
 
-    return handlers
+    def _collect_handlers[
+        **P, R
+    ](self, handler: ty.Callable[P, R]) -> HandlerMapping[Command]:
+        handlers: HandlerMapping[Command] = {}
+        if inspect.isfunction(handler):
+            cntner = self._extract_from_function(handler)
+            if cntner:
+                cmd = ty.cast(type[Command], cntner.command)
+                handlers[cmd] = cntner
+        elif inspect.isclass(handler):
+            handlers.update(self._extract_from_class(handler))
+        else:
+            raise Exception("Not Supported")
+        return handlers
+
+    def register(self, handler: AnyCallable):
+        handlers = self._collect_handlers(handler)
+        self._handlers.update(handlers)
+        return handler
+
+    def unpack[**P, R](self, cmd: ty.Callable[P, R]):
+        # TODO: support function unpack
+        def wrapper[Owner](func: ty.Callable[ty.Concatenate[Owner, P], ty.Any]):
+            return func
+
+        return wrapper
+
+    def __call__[
+        T
+    ](self, handler: type[T] | ty.Callable[[T, ty.Any], ty.Any],):
+        return self.register(handler)
+
+    def merge(self, other: "Mark[ty.Any]") -> HandlerMapping[ty.Any]:
+        handler_map: HandlerMapping[ty.Any] = {}
+        handler_map.update(other._handlers)
+        return handler_map
+
+    @classmethod
+    def merge_all(cls):
+        handler_map: HandlerMapping[ty.Any] = {}
+        for _, ms in cls._mark_registry.items():
+            for m in ms:
+                handler_map.update(m._handlers)
+        return handler_map
+
+
+def mark[C](cmd_type: type[C]) -> Mark[C]:
+    mark = Mark[C](cmd_type)
+    return mark
