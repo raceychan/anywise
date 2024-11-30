@@ -2,10 +2,24 @@ import typing as ty
 
 from ididi import DependencyGraph
 
-from ._type_resolve import HandlerMapping, Mark
+from .mark import HandlerMapping, Mark
+
+# class AsyncWise:
+#     call sync handler in anyio worker thread
+#     def __init__(self, wise: AnyWise):
+#         self.wise = wise
+
+#     async def send(self, msg: IMessage) -> ty.Awaitable[ty.Any]:
+#         ...
+#
 
 
-class AnyWise:
+class IMessage[R](ty.Protocol):
+    "The base massage protocol"
+    # def __subclasscheck__(self, subclass: type) -> bool: ...
+
+
+class AnyWise[MessageType]:
     """
     userwise = AnyWise()
     authwise = AnyWise()
@@ -20,30 +34,27 @@ class AnyWise:
         appwise.send(command)
     """
 
-    def __init__(self):
-        self._handlers = {}
-        self._dg = DependencyGraph()
+    def __init__(self, dg: DependencyGraph | None = None):
+        # self._handlers = {}
+        self._dg = dg or DependencyGraph()
+        self.command_handlers: HandlerMapping[MessageType] = {}
 
-        self.command_handlers: HandlerMapping[ty.Any] = {}
-
-    def register(self, mark: Mark[ty.Any]) -> None:
+    def merge_marks(self, mark: Mark[MessageType, ty.Any]) -> None:
         self.command_handlers.update(mark.merge_all())
+        # statically analysie dependencies
 
-    async def send[R](self, msg: ty.Any) -> ty.Awaitable[R]:
-        """
-        aw.send[CreateUser](command)
-        """
-
+    def send(self, msg: MessageType):
         container = self.command_handlers[type(msg)]
 
+        # assert handler is async
         if (owner_type := container.owner_type) is not None:
             obj = self._dg.resolve(owner_type)
-            return await container.handler(obj, msg)
+            res = container(obj, message=msg)
         else:
-            return await container.handler(msg)
+            res = container(message=msg)
+
+        return res
 
     # async def ask(self, msg) -> R: ...
 
     # async def publish(self, msg) -> R: ...
-
-

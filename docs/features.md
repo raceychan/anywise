@@ -1,3 +1,7 @@
+concept
+
+use anywise to implement hexagonal architecture
+
 # Features
 
 ## use mark to mark a handler with command
@@ -109,3 +113,62 @@ app = FastAPI(
 )
 app.include_router(autorouter())
 ```
+
+## sink
+
+transfer your events to correspnding sinks
+
+AWS SQS Sink # forward message to AWS SQS
+Kafka Sink # to kafka
+HTTP Sink # to a http api
+Database Sink # store to database
+
+```py
+sink = AWSEventSink(
+    queue_url="test-queue",
+    region_name="eu-central-1"
+)
+
+class UserCreatedEvent:
+    ...
+
+
+sink.add_event(UserCreatedEvent)
+aw = AnyWise(
+    event_sinks = [AWSEventSink]
+)
+
+await aw.publish(UserCreatedEvent)
+# this goes directly to corresponding sink
+```
+
+## Port
+
+Ports are source of data to our domain
+
+Kafka port
+FastAPI port
+Rabbit port
+
+```py
+import uvloop
+from aiokafka import Kafka
+from anywise.port import KafkaPort
+
+broker = Kafka(connect_info)
+source = KafkaPort(broker)
+
+
+async def main():
+    aw = AnyWise(
+        source = KafkaPort
+    )
+
+    await aw.listen()
+```
+
+### Generate doc
+
+integrate exceptions
+integrate openapi
+integrate https://www.asyncapi.com/en
