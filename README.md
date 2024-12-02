@@ -35,6 +35,14 @@ On its way here...
 
 On its way here...
 
+1. command_guard
+
+```py
+@mark(UserCommand).guard
+async def validate_user(user_service: ...):
+     ...
+```
+
 ## FAQ
 
 On its way here...

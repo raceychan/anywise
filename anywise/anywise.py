@@ -2,7 +2,7 @@ import typing as ty
 
 from ididi import DependencyGraph
 
-from .mark import HandlerMapping, Mark
+from .mark import Mark
 
 # class AsyncWise:
 #     call sync handler in anyio worker thread
@@ -35,25 +35,18 @@ class AnyWise[MessageType]:
     """
 
     def __init__(self, dg: DependencyGraph | None = None):
-        # self._handlers = {}
         self._dg = dg or DependencyGraph()
-        self.command_handlers: HandlerMapping[MessageType] = {}
+        self._command_handlers: dict[type[MessageType], Mark[MessageType, ty.Any]] = {}
+        self._event_handlers: ... = {}
 
-    def merge_marks(self, mark: Mark[MessageType, ty.Any]) -> None:
-        self.command_handlers.update(mark.merge_all())
-        # statically analysie dependencies
+    def collect(self, mark: Mark[MessageType, ty.Any]) -> None:
+        for msg_type in mark.duties:
+            self._command_handlers[msg_type] = mark
 
     def send(self, msg: MessageType):
-        container = self.command_handlers[type(msg)]
-
-        # assert handler is async
-        if (owner_type := container.owner_type) is not None:
-            obj = self._dg.resolve(owner_type)
-            res = container(obj, message=msg)
-        else:
-            res = container(message=msg)
-
-        return res
+        mark = self._command_handlers[type(msg)]
+        # assert handler is not async
+        return mark.dispatch(msg)
 
     # async def ask(self, msg) -> R: ...
 

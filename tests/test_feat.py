@@ -33,7 +33,7 @@ command_handler = mark(UserCommand)
 @pytest.fixture
 def anywise() -> AnyWise[UserCommand]:
     aw = AnyWise[UserCommand]()
-    aw.merge_marks(command_handler)
+    aw.collect(command_handler)
     return aw
 
 
@@ -71,6 +71,19 @@ def test_sendto_method(anywise: AnyWise[UserCommand]):
 def test_sendto_function(anywise: AnyWise[UserCommand]):
     cmd = UpdateUser("1", "user", "new")
     res = anywise.send(cmd)
-    # cmd = UpdateUser[str]
-    # res = anwywise.send(cmd) -> str
     assert res == "new"
+
+
+from fastapi import Depends
+
+
+class User:
+    def __init__(self, name: str = "name"): ...
+
+
+def user_repo(user: User = Depends(User)):
+    return user
+
+
+def test_fastapi_factor():
+    repo = user_repo()

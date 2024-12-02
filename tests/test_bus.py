@@ -29,7 +29,7 @@ async def get_user_handler(query: GetUserQuery):
 async def create_user_handler(command: CreateUserCommand): ...
 
 
-async def test_bus():
-    await mb.send(CreateUserCommand(user_id=123))
-    user = await mb.send(GetUserQuery(user_id=123))
-    print(f"Handling {GetUserQuery} result {user}")
+# async def test_bus():
+#     await mb.send(CreateUserCommand(user_id=123))
+#     user = await mb.send(GetUserQuery(user_id=123))
+#     print(f"Handling {GetUserQuery} result {user}")

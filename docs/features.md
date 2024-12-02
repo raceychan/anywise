@@ -153,15 +153,15 @@ Rabbit port
 ```py
 import uvloop
 from aiokafka import Kafka
-from anywise.port import KafkaPort
+from anywise.source import KafkaSource
 
 broker = Kafka(connect_info)
-source = KafkaPort(broker)
+source = KafkaSource(broker)
 
 
 async def main():
     aw = AnyWise(
-        source = KafkaPort
+        source = KafkaSource
     )
 
     await aw.listen()
@@ -172,3 +172,18 @@ async def main():
 integrate exceptions
 integrate openapi
 integrate https://www.asyncapi.com/en
+
+## Source-Service-Sink Architecture
+
+     Command      Event
+Source  ->  Service  ->  Sink
+
+we receive command from source
+service handles commands and generate side-effect
+we record these side-effect with events.
+then redirect these events to sink.
+
+reference:
+
+https://medium.com/ssense-tech/hexagonal-architecture-there-are-always-two-sides-to-every-story-bc0780ed7d9c
+

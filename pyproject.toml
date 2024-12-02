@@ -33,7 +33,7 @@ python = ">=3.12"
 typing_extensions = ">=4.12.2,<5"
 
 [tool.pixi.pypi-dependencies]
-ididi = ">=1.0.8"
+ididi = ">=1.1.0"
 
 [tool.pixi.feature.publish.dependencies]
 hatch = ">=1.13.0,<2"
@@ -43,7 +43,7 @@ twine = ">=5.1.1,<6"
 default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 publish = { features = ["publish"], solve-group = "default" }
-test = { features = ["test"], solve-group = "dev" }
+test = { features = ["test", "dev"], solve-group = "dev" }
 
 [tool.pixi.feature.dev.dependencies]
 fastapi = ">=0.115.5"
