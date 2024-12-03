@@ -40,14 +40,25 @@ class AnyWise[MessageType]:
         self._event_handlers: ... = {}
 
     def collect(self, mark: Mark[MessageType, ty.Any]) -> None:
+        # merge them alone the way?
         for msg_type in mark.duties:
             self._command_handlers[msg_type] = mark
 
     def send(self, msg: MessageType):
+        # should we separate send and ask?
         mark = self._command_handlers[type(msg)]
         # assert handler is not async
         return mark.dispatch(msg)
 
     # async def ask(self, msg) -> R: ...
 
-    # async def publish(self, msg) -> R: ...
+    async def publish(self, msg: MessageType, concurrent: bool = False) -> None:
+        """
+        if concurrent
+        """
+        subscribers = self._event_handlers[type(msg)]
+
+        for sub in subscribers:
+            await sub.dispatch(msg)
+
+
