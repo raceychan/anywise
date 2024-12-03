@@ -40,6 +40,15 @@ class AnyWise[MessageType]:
         self._event_handlers: ... = {}
 
     def collect(self, mark: Mark[MessageType, ty.Any]) -> None:
+        """
+        handlers should be able to get anywise as dependency
+
+        async def create_user(aw: AnyWise, repo: UserRepo, cmd: CreateUser):
+            user = User(cmd.user_id, cmd.user_name, cmd.user_email)
+            await repo.add(user)
+            event = UserCreated(user_id, user_name, user_email, created_at)
+            await aw.publish(event)
+        """
         # merge them alone the way?
         for msg_type in mark.duties:
             self._command_handlers[msg_type] = mark
@@ -60,5 +69,8 @@ class AnyWise[MessageType]:
 
         for sub in subscribers:
             await sub.dispatch(msg)
+            """
+            await self._event_sink.write(event)
+            """
 
 

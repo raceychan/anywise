@@ -65,3 +65,17 @@ class KafkaSink(EventSink):
 
 
 class EmailSink(EventSink): ...
+"""
+@notify(UserCreated, to_sink=True)
+async send_email(service: EmailService, event: UserCreated):
+    ...
+
+
+class PGEventStore(Sink):
+    def write(self, event: Event):
+        update(events).where(event_id=event.id).values(is_consumed=True)
+"""
+
+
+class DBSink(EventSink):
+    "save events to database"
