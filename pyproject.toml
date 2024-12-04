@@ -1,6 +1,6 @@
 [project]
 authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
-dependencies = ["ididi==1.1.0"]
+dependencies = ["ididi>=1.1.1"]
 description = "Anywise let you write your application anywise"
 dynamic = ["version"]
 name = "anywise"

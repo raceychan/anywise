@@ -38,6 +38,7 @@ class AnyWise[MessageType]:
         self._dg = dg or DependencyGraph()
         self._command_handlers: dict[type[MessageType], Mark[MessageType, ty.Any]] = {}
         self._event_handlers: ... = {}
+        self._dg.register_dependent(self, self.__class__)
 
     def collect(self, mark: Mark[MessageType, ty.Any]) -> None:
         """
@@ -70,7 +71,6 @@ class AnyWise[MessageType]:
         for sub in subscribers:
             await sub.dispatch(msg)
             """
-            await self._event_sink.write(event)
+            if event.to_sink:
+                await self._event_sink.write(event)
             """
-
-
