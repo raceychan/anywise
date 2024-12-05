@@ -1,6 +1,5 @@
 import ast
 import inspect
-import types
 import typing as ty
 
 
@@ -19,7 +18,7 @@ class ExceptionFinder(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def collect_exceptions(func: ty.Callable) -> list[Exception]:
+def collect_exceptions[**P, T](func: ty.Callable[P, T]) -> list[Exception]:
     """
     TODO: recursively search for function call,
     diffierentiate customized exception and builtin exception

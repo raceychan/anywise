@@ -4,39 +4,32 @@ from ididi import DependencyGraph
 
 from .mark import Mark
 
-# class AsyncWise:
-#     call sync handler in anyio worker thread
-#     def __init__(self, wise: AnyWise):
-#         self.wise = wise
+"""
+1. use mark to collect handlers, register them into nodes
+2. merge marks into anywise
+3. statically resolve all dependencies at anywise
+4. when call, resolve dependencies, inject them to handler
+"""
 
-#     async def send(self, msg: IMessage) -> ty.Awaitable[ty.Any]:
-#         ...
-#
+# async def ask(self, msg) -> R: ...
 
+# async def publish(self, msg: MessageType, concurrent: bool = False) -> None:
+#     """
+#     if concurrent
+#     """
+#     subscribers = self._event_handlers[type(msg)]
 
-class IMessage[R](ty.Protocol):
-    "The base massage protocol"
-    # def __subclasscheck__(self, subclass: type) -> bool: ...
+#     for sub in subscribers:
+#         await sub.dispatch(msg)
+#         # if event.to_sink:
+#         # await self._event_sink.write(event)
 
 
 class AnyWise[MessageType]:
-    """
-    userwise = AnyWise()
-    authwise = AnyWise()
-
-    appwise = AnyWise.include([user_wise, auth_wise])
-
-    class CreateUser(Command):
-        ...
-
-    @app.post("users")
-    async def _(create_user: CreateUser):
-        appwise.send(command)
-    """
-
     def __init__(self, dg: DependencyGraph | None = None):
         self._dg = dg or DependencyGraph()
-        self._command_handlers: dict[type[MessageType], Mark[MessageType, ty.Any]] = {}
+        self._handler_details = {}
+        self._command_handlers = {}
         self._event_handlers: ... = {}
         self._dg.register_dependent(self, self.__class__)
 
@@ -50,27 +43,15 @@ class AnyWise[MessageType]:
             event = UserCreated(user_id, user_name, user_email, created_at)
             await aw.publish(event)
         """
+
         # merge them alone the way?
         for msg_type in mark.duties:
             self._command_handlers[msg_type] = mark
 
-    def send(self, msg: MessageType):
-        # should we separate send and ask?
-        mark = self._command_handlers[type(msg)]
-        # assert handler is not async
-        return mark.dispatch(msg)
+    def build_graph(self): ...
 
-    # async def ask(self, msg) -> R: ...
+    def send(self, msg: MessageType) -> ty.Any:
+        # return a result T or an Awaitable[T]
+        ...
 
-    async def publish(self, msg: MessageType, concurrent: bool = False) -> None:
-        """
-        if concurrent
-        """
-        subscribers = self._event_handlers[type(msg)]
 
-        for sub in subscribers:
-            await sub.dispatch(msg)
-            """
-            if event.to_sink:
-                await self._event_sink.write(event)
-            """
