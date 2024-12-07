@@ -30,7 +30,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.12.2-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2024b-hc8b5060_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/xz-5.2.6-h166bdaf_0.tar.bz2
-      - pypi: https://files.pythonhosted.org/packages/27/55/a1b79027cfce171c55b0db447bb8b35d2cc2ef9e63d8fbfd42cfc0d3e70a/ididi-1.1.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/47/8b/70e22063082966cd857f78fe60945ddc60f7708db539783cf8a74d9179f5/ididi-1.1.2-py3-none-any.whl
   dev:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -107,7 +107,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/websockets-14.1-py313h536fd9c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/xz-5.2.6-h166bdaf_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/yaml-0.2.5-h7f98852_2.tar.bz2
-      - pypi: https://files.pythonhosted.org/packages/27/55/a1b79027cfce171c55b0db447bb8b35d2cc2ef9e63d8fbfd42cfc0d3e70a/ididi-1.1.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/47/8b/70e22063082966cd857f78fe60945ddc60f7708db539783cf8a74d9179f5/ididi-1.1.2-py3-none-any.whl
   publish:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -211,7 +211,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-3.21.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.23.0-py313h80202fe_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.6-ha6fb4c9_0.conda
-      - pypi: https://files.pythonhosted.org/packages/27/55/a1b79027cfce171c55b0db447bb8b35d2cc2ef9e63d8fbfd42cfc0d3e70a/ididi-1.1.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/47/8b/70e22063082966cd857f78fe60945ddc60f7708db539783cf8a74d9179f5/ididi-1.1.2-py3-none-any.whl
   test:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -299,7 +299,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/websockets-14.1-py312h66e93f0_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/xz-5.2.6-h166bdaf_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/yaml-0.2.5-h7f98852_2.tar.bz2
-      - pypi: https://files.pythonhosted.org/packages/27/55/a1b79027cfce171c55b0db447bb8b35d2cc2ef9e63d8fbfd42cfc0d3e70a/ididi-1.1.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/47/8b/70e22063082966cd857f78fe60945ddc60f7708db539783cf8a74d9179f5/ididi-1.1.2-py3-none-any.whl
 packages:
 - kind: conda
   name: _libgcc_mutex
@@ -1130,9 +1130,9 @@ packages:
   timestamp: 1610092261086
 - kind: pypi
   name: ididi
-  version: 1.1.1
-  url: https://files.pythonhosted.org/packages/27/55/a1b79027cfce171c55b0db447bb8b35d2cc2ef9e63d8fbfd42cfc0d3e70a/ididi-1.1.1-py3-none-any.whl
-  sha256: b8d00662ad44c44c181368fb89ee11477d9c31ed01d10a50e9c9edd50409f630
+  version: 1.1.2
+  url: https://files.pythonhosted.org/packages/47/8b/70e22063082966cd857f78fe60945ddc60f7708db539783cf8a74d9179f5/ididi-1.1.2-py3-none-any.whl
+  sha256: c8b1561d80f87b6223832cca695c2197ce0a7f775db566f122d9b20503bf4fa3
   requires_dist:
   - python-graphviz>=0.20.3,<0.21 ; extra == 'graphviz'
   requires_python: '>=3.9'

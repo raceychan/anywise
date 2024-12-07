@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from anywise.anywise import AnyWise
+from anywise import AnyWise, inject
 from anywise.mark import mark
 
 
@@ -30,32 +30,37 @@ class UpdateUser(UserCommand):
 command_handler = mark(UserCommand)
 
 
-@pytest.fixture
-def anywise() -> AnyWise[UserCommand]:
-    aw = AnyWise[UserCommand]()
-    aw.collect(command_handler)
-    return aw
-
-
-@command_handler
-def update_user(cmd: UpdateUser) -> str:
-    return cmd.new_name
-
-
-@command_handler
+@command_handler.register
 class UserService:
-    def __init__(self):
-        self.name = "name"
+    def __init__(self, name: str = "test"):
+        self.name = name
 
     def create_user(self, cmd: CreateUser) -> str:
+        assert self.name == "test"
         return "hello"
 
     def remove_user(self, cmd: RemoveUser) -> str:
+        assert self.name == "test"
         return "goodbye"
 
-    # @command_handler.unpack(CreateUser)
-    # def unpack_create(self, user_id: str, user_name: str) -> str:
-    #     return "created"
+
+def user_service_factory() -> "UserService":
+    return UserService(name="test")
+
+
+@command_handler.register
+def update_user(
+    cmd: UpdateUser,
+    service: UserService = inject(user_service_factory),
+) -> str:
+    return cmd.new_name
+
+
+@pytest.fixture
+def anywise() -> AnyWise[UserCommand]:
+    aw = AnyWise[UserCommand]()
+    aw.merge_registries([command_handler])
+    return aw
 
 
 def test_sendto_method(anywise: AnyWise[UserCommand]):
@@ -72,18 +77,3 @@ def test_sendto_function(anywise: AnyWise[UserCommand]):
     cmd = UpdateUser("1", "user", "new")
     res = anywise.send(cmd)
     assert res == "new"
-
-
-from fastapi import Depends
-
-
-class User:
-    def __init__(self, name: str = "name"): ...
-
-
-def user_repo(user: User = Depends(User)):
-    return user
-
-
-def test_fastapi_factor():
-    repo = user_repo()

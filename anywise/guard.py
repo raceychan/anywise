@@ -7,7 +7,17 @@ provide a mechanism that
 2. wrap the handler, works like a decorator
 """
 
-type MessageGuard = ty.Callable[..., ty.Any]
+type State = dict[str, ty.Any]
+type Message = ty.Any
+type Handler = ty.Callable[[Message], ty.Any]
+
+
+type MessageGuard = ty.Callable[[State, Message], State]
+
+"""
+State is a mutable object that carry state
+guard can use it to store side-effects of functions
+"""
 
 
 class Guard[MessageType]:

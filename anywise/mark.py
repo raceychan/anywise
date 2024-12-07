@@ -1,22 +1,19 @@
 import inspect
 import typing as ty
 from dataclasses import dataclass
-from types import MethodType
 
-from ididi import DependencyGraph
+from ididi import DependencyGraph, INode
 
 type HandlerMapping[Command] = dict[
-    type[Command], "HanlderDetails[Command, ty.Any, ty.Any]"
-]
-type FuncHandler[Command, R] = ty.Callable[[Command], R]
-type MethodHandler[Command, Owner, R] = ty.Callable[[Owner, Command], R]
-
-type AnyHandler[Owner, **P, R] = type[Owner] | ty.Callable[P, R] | ty.Callable[
-    ty.Concatenate[Owner, P], R
+    type[Command], "FuncMeta[Command] | MethodMeta[Command]"
 ]
 
+type ResolvedFunc[Command] = ty.Callable[[Command], ty.Any]
 
-# TODO? Actor node
+type AnyHandler[Owner, **P] = type[Owner] | ty.Callable[P, ty.Any] | ty.Callable[
+    ty.Concatenate[Owner, P], ty.Any
+]
+
 
 # class Mark:
 # def unpack[**P, R](self, msg: ty.Callable[P, R]):
@@ -43,156 +40,173 @@ type AnyHandler[Owner, **P, R] = type[Owner] | ty.Callable[P, R] | ty.Callable[
 
 
 @dataclass
-class HanlderDetails[M, O, R]:
+class FuncMeta[Message]:
     """
     is_async: bool
     """
 
-    message_type: type[M]
-    handler: FuncHandler[M, R] | MethodHandler[M, O, R]
-    owner_type: type[O] | None = None
+    message_type: type[Message]
+    handler: ty.Callable[[Message], ty.Any]
+
+    # owner_type: type[O] | None = None
+    # contexted: bool = False
+
+    # @property
+    # def is_method(self) -> bool:
+    # return self.owner_type is not None
 
 
-class Mark[Message, IReturn]:
+@dataclass
+class MethodMeta[Message](FuncMeta[Message]):
+    owner_type: type
+
+
+def extract_from_function[
+    Message
+](message_type: type[Message], handler: ty.Callable[..., ty.Any]) -> FuncMeta[Message]:
+    sig = inspect.signature(handler)
+    for param in sig.parameters.values():
+        param_type = param.annotation
+        if param_type is sig.empty:
+            continue
+        if inspect.isclass(param_type) and issubclass(param_type, message_type):
+            return FuncMeta(param_type, handler)
+    else:
+        raise Exception(f"no subcommand found in {handler}")
+
+
+def extract_from_class[
+    Message
+](message_type: type[Message], cls: type) -> HandlerMapping[Message]:
+    handlers: HandlerMapping[Message] = {}
+    for method_name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
+        if method_name.startswith("_"):
+            continue
+
+        sig = inspect.signature(method)
+        for param in sig.parameters.values():
+
+            param_type = param.annotation
+            if param_type is sig.empty:
+                continue
+
+            if not issubclass(param_type, message_type):
+                continue
+
+            container = MethodMeta[Message](
+                message_type=param_type,
+                handler=method,
+                owner_type=cls,
+            )
+            handlers[param_type] = container
+    return handlers
+
+
+def collect_handlers[
+    Message
+](message_type: type[Message], handler: AnyHandler[ty.Any, ...]) -> HandlerMapping[
+    Message
+]:
+    handlers: HandlerMapping[Message] = {}
+    if inspect.isfunction(handler):
+        node = extract_from_function(message_type, handler)
+        handlers[node.message_type] = node
+        # config = INodeConfig(ignore=(node.message_type,))
+    elif inspect.isclass(handler):
+        methods = extract_from_class(message_type, handler)
+        # config = INodeConfig(ignore=(node.message_type,))
+        handlers.update(methods)
+    else:
+        raise Exception("Handler Not Supported")
+    return handlers
+
+
+class HandlerRegistry[Message]:
     "A pure container that collects handlers"
 
-    _mark_registry: dict[type[Message], "Mark[Message, ty.Any]"] = {}
+    _mark_registry: dict[type[Message], "HandlerRegistry[Message]"] = {}
+
+    def __new__(cls, message: type[Message]):
+        cls._mark_registry[message] = self = super().__new__(cls)
+        return self
 
     def __init__(self, message: type[Message]):
         self.message_type = message
-        self._handler_details: HandlerMapping[Message] = {}
-        self._dig = DependencyGraph()
+        self._handler_meta: HandlerMapping[Message] = {}
+        self._graph = DependencyGraph()
 
-        # TODO: move this to __new__
-        self._mark_registry[message] = self
-
-    @property
-    def duties(self):
-        return self._handler_details.keys()
+    def __iter__(self):
+        items = self._handler_meta.items()
+        for msg, meta in items:
+            yield (msg, meta)
 
     def guard(self, func: ty.Any):
         "like middleware in starlette"
 
+    def factory[**P, R](self, factory: INode[P, R]) -> INode[P, R]:
+        self._graph.node(factory)
+        return factory
+
     @property
     def graph(self):
-        return self._dig
+        return self._graph
 
-    def _extract_from_function(
-        self, handler: ty.Callable[..., IReturn]
-    ) -> HanlderDetails[Message, ty.Any, IReturn]:
-        sig = inspect.signature(handler)
-        for param in sig.parameters.values():
-            param_type = param.annotation
-            if param_type is sig.empty:
-                continue
-            if issubclass(param_type, self.message_type):
-                return HanlderDetails(param_type, handler)
-        else:
-            raise Exception(f"no subcommand found in {handler}")
+    @ty.overload
+    def register[T](self, handler: type[T]) -> type[T]: ...
 
-    def _extract_from_class(self, cls: type) -> HandlerMapping[Message]:
-        handlers: HandlerMapping[Message] = {}
-        for _, method in inspect.getmembers(cls, predicate=inspect.isfunction):
-            sig = inspect.signature(method)
-            for param in sig.parameters.values():
-                if param.name.startswith("_"):
-                    continue
+    @ty.overload
+    def register[
+        T
+    ](self, handler: ty.Callable[[T, ty.Any], ty.Any]) -> ty.Callable[
+        [T, ty.Any], ty.Any
+    ]: ...
 
-                param_type = param.annotation
-                if param_type is sig.empty:
-                    continue
+    @ty.overload
+    def register(
+        self, handler: ty.Callable[[ty.Any], ty.Any]
+    ) -> ty.Callable[[ty.Any], ty.Any]: ...
 
-                if not issubclass(param_type, self.message_type):
-                    continue
+    def register[
+        T
+    ](
+        self,
+        handler: (
+            type[T] | ty.Callable[[T, ty.Any], ty.Any] | ty.Callable[[ty.Any], ty.Any]
+        ),
+    ):
 
-                container = HanlderDetails[Message, ty.Any, ty.Any](
-                    message_type=param_type,
-                    handler=method,
-                    owner_type=cls,
-                )
-                handlers[param_type] = container
-        return handlers
+        mappings = collect_handlers(self.message_type, handler)
+        for msg_type, handler_meta in mappings.items():
+            f = handler_meta.handler
+            if isinstance(handler_meta, MethodMeta):
+                self._graph.node(ignore=msg_type)(handler_meta.owner_type)
+            else:
+                handler_meta.handler = self._graph.entry(ignore=msg_type)(f)
 
-    def _collect_handlers[
-        Owner, **P
-    ](self, handler: AnyHandler[Owner, P, IReturn]) -> HandlerMapping[Message]:
-        handlers: HandlerMapping[Message] = {}
-        if inspect.isfunction(handler):
-            node = self._extract_from_function(handler)
-            handlers[node.message_type] = node
-            # config = INodeConfig(ignore=(node.message_type,))
-            self._dig.entry(handler)
-        elif inspect.isclass(handler):
-            methods = self._extract_from_class(handler)
-            self._dig.node(handler)
-            handlers.update(methods)
-        else:
-            raise Exception("Handler Not Supported")
-        return handlers
-
-    # def _extract_from_module(self, mod: ...): ...
-
-    def register[Owner, **P](self, handler: AnyHandler[Owner, P, IReturn]):
-        handlers = self._collect_handlers(handler)
-        self._handler_details.update(handlers)
+        self._handler_meta.update(mappings)
         return handler
-
-    def factory[T](self, handler: type[T]):
-        self._dig.node(handler)
-        return handler
-
-    def __call__[Owner, **P](self, handler: AnyHandler[Owner, P, IReturn]):
-        return self.register(handler)
-
-    def merge(self, other: "Mark[ty.Any, ty.Any]") -> HandlerMapping[ty.Any]:
-        handler_map: HandlerMapping[ty.Any] = {}
-        handler_map.update(other._handler_details)
-        return handler_map
-
-    @classmethod
-    def merge_all(cls):
-        handler_map: HandlerMapping[ty.Any] = {}
-        # merge graph as well
-        for _, m in cls._mark_registry.items():
-            handler_map.update(m._handler_details)
-        return handler_map
 
     @classmethod
     def get_mark[
         M
-    ](cls, msg_type: type[Message], default: M = None) -> "Mark[Message, IReturn] | M ":
+    ](
+        cls, msg_type: type[Message], default: M = None
+    ) -> "HandlerRegistry[Message] | M ":
         return cls._mark_registry.get(msg_type, default)
 
 
 @ty.overload
-def mark[C](msg_type: type[C]) -> Mark[C, ty.Any]: ...
+def mark[C](msg_type: type[C]) -> HandlerRegistry[C]: ...
 
 
 @ty.overload
-def mark[C, R](msg_type: type[C], rt: type[R]) -> Mark[C, R]: ...
+def mark[C, R](msg_type: type[C], rt: type[R]) -> HandlerRegistry[C]: ...
 
 
 def mark[
     C, R
-](msg_type: type[C], rt: type[R] | None = None) -> Mark[C, R] | Mark[C, ty.Any]:
-    m = Mark[C, R].get_mark(msg_type, Mark[C, R](msg_type))
+](msg_type: type[C], rt: type[R] | None = None) -> (
+    HandlerRegistry[C] | HandlerRegistry[C]
+):
+    m = HandlerRegistry[C].get_mark(msg_type, HandlerRegistry[C](msg_type))
     return m
-
-
-# class Actor[Message, IReturn]:
-#     def __init__(self):
-#         self._handlers: dict[type, HanlderDetails[Message, ty.Any, IReturn]] = {}
-#         self._dig = DependencyGraph()
-
-#     def dispatch(self, command: Message) -> IReturn:
-#         return self.call_handler(command)
-
-#     def call_handler(self, command: Message) -> IReturn:
-#         container = self._handlers[type(command)]
-#         handler = container.handler
-
-#         if not isinstance(handler, MethodType) and container.owner_type:
-#             owner = self._dig.resolve(container.owner_type)
-#             method = MethodType(handler, owner)
-#             self._handlers[type(command)] = handler = method
-#         return handler(message=command)
