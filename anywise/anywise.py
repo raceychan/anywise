@@ -5,7 +5,7 @@ from types import MethodType
 from ididi import DependencyGraph
 
 from ._itypes import CallableMeta
-from ._registry import HandlerRegistry, ListenerRegistry, MethodMeta, RegistryBase
+from ._registry import HandlerRegistry, ListenerRegistry, MethodMeta
 
 # class WorkUnit[Context, Message]:
 #     type Handler = ty.Callable[[Context, Message], Context]
@@ -49,36 +49,56 @@ class Worker[Message]:
 # class AsyncWise[MessageType]:
 #     ...
 
-"""
-class Sender: ...
-class Publisher: ...
-"""
+
+class Sender:
+    _handlers: dict[type, Worker[ty.Any]]
+
+    def __init__(self, anywise: "AnyWise"):
+        self._anywise = anywise
+        self._handlers = {}
+
+    def include(self, registry: HandlerRegistry[ty.Any]) -> None:
+        for msg_type, handler_meta in registry:
+            self._handlers[msg_type] = Worker[ty.Any](self._anywise, handler_meta)
+
+    def send(self, msg: ty.Any) -> ty.Any:
+        worker = self._handlers[type(msg)]
+        return worker.handle(msg)
+
+
+class Publisher:
+    _subscribes: defaultdict[type, list[Worker[ty.Any]]]
+
+    def __init__(self, anywise: "AnyWise"):
+        self._anywise = anywise
+        self._subscribes = defaultdict(list)
+
+    def include(self, registry: ListenerRegistry[ty.Any]) -> None:
+        for msg_type, listener_metas in registry:
+            if msg_type not in self._subscribes:
+                self._subscribes[msg_type] = list()
+            workers = [Worker[ty.Any](self._anywise, meta) for meta in listener_metas]
+            self._subscribes[msg_type].extend(workers)
+
+    def publish(self, msg: ty.Any) -> None:
+        subscribers = self._subscribes[type(msg)]
+        for sub in subscribers:
+            sub.handle(msg)
 
 
 class AnyWise:
-    _handlers: dict[type, Worker[ty.Any]]
-    _subscribes: defaultdict[type, list[Worker[ty.Any]]]
 
     def __init__(
         self,
         *,
         dg: DependencyGraph | None = None,
+        sender: Sender | None = None,
+        publisher: Publisher | None = None,
     ):
         self._dg = dg or DependencyGraph()
-        self._handlers = {}
-        self._subscribes = defaultdict(list)
+        self._sender = sender or Sender(self)
+        self._publisher = publisher or Publisher(self)
         self._dg.register_dependent(self, self.__class__)
-
-    def _include_handlers(self, registry: HandlerRegistry[ty.Any]):
-        for msg_type, handler_meta in registry:
-            self._handlers[msg_type] = Worker[ty.Any](self, handler_meta)
-
-    def _include_listeners(self, registry: ListenerRegistry[ty.Any]):
-        for msg_type, listener_metas in registry:
-            if msg_type not in self._subscribes:
-                self._subscribes[msg_type] = list()
-            workers = [Worker[ty.Any](self, meta) for meta in listener_metas]
-            self._subscribes[msg_type].extend(workers)
 
     def include(
         self,
@@ -87,19 +107,16 @@ class AnyWise:
         for registry in registries:
             self._dg.merge(registry.graph)
             if isinstance(registry, HandlerRegistry):
-                self._include_handlers(registry)
+                self._sender.include(registry)
             else:
-                self._include_listeners(registry)
+                self._publisher.include(registry)
         self._dg.static_resolve_all()
 
     def resolve[T](self, dep_type: type[T]) -> T:
         return self._dg.resolve(dep_type)
 
     def send(self, msg: ty.Any) -> ty.Any:
-        worker = self._handlers[type(msg)]
-        return worker.handle(msg)
+        return self._sender.send(msg)
 
     def publish(self, msg: ty.Any) -> None:
-        subscribers = self._subscribes[type(msg)]
-        for sub in subscribers:
-            sub.handle(msg)
+        self._publisher.publish(msg)

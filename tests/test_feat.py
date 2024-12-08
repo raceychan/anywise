@@ -18,7 +18,6 @@ def test_send_to_function(anywise: AnyWise):
     assert res == "new"
 
 
-
 def test_event_handler(anywise: AnyWise):
     event = UserCreated("new_name")
-    res = anywise.publish(event)
+    anywise.publish(event)

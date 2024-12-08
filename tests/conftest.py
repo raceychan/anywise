@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from anywise import AnyWise, command_registry, event_registry, inject
+from anywise import AnyWise, handler_registry, inject, listener_registry
 
 
 @dataclass
@@ -35,11 +35,11 @@ class UserCreated(UserEvent):
     changed_name: str
 
 
-user_registry = command_registry(UserCommand)
-e_regitry = event_registry(UserEvent)
+user_cmd_handler = handler_registry(UserCommand)
+user_event_handler = listener_registry(UserEvent)
 
 
-@user_registry.register
+@user_cmd_handler
 class UserService:
     def __init__(self, name: str = "test", *, anywise: AnyWise):
         self.name = name
@@ -58,7 +58,7 @@ def user_service_factory(anywise: AnyWise) -> "UserService":
     return UserService(name="test", anywise=anywise)
 
 
-@user_registry.register
+@user_cmd_handler
 def update_user(
     cmd: UpdateUser,
     service: UserService = inject(user_service_factory),
@@ -66,23 +66,24 @@ def update_user(
     return cmd.new_name
 
 
-@e_regitry.register
+@user_event_handler
 def react_to_event(
     event: UserCreated,
     service: UserService = inject(user_service_factory),
 ) -> None:
-    print(event)
+    print(f"first handler {event}")
 
-@e_regitry.register
+
+@user_event_handler
 def react_to_event2(
     event: UserCreated,
     service: UserService = inject(user_service_factory),
 ) -> None:
-    print(f"second to {event}")
+    print(f"second handler {event}")
 
 
 @pytest.fixture(scope="module")
 def anywise() -> AnyWise:
     aw = AnyWise()
-    aw.include([user_registry, e_regitry])
+    aw.include([user_cmd_handler, user_event_handler])
     return aw

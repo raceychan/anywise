@@ -6,8 +6,13 @@ from ._itypes import FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
 from ._visitor import Target, collect_handlers, collect_listeners
 
 
-class RegistryBase:
-    def __init__(self, graph: DependencyGraph):
+class RegistryBase[Message]:
+    def __init__(
+        self, message_type: type[Message], *, graph: DependencyGraph | None = None
+    ):
+        self._message_type = message_type
+        if graph is None:
+            graph = DependencyGraph()
         self._graph = graph
 
     @property
@@ -21,11 +26,31 @@ class RegistryBase:
     def guard(self, func: ty.Any):
         "like middleware in starlette"
 
+    @ty.overload
+    def register[R](self, handler: type[R]) -> type[R]: ...
 
-class ListenerRegistry[Event](RegistryBase):
+    @ty.overload
+    def register[**P, R](self, handler: ty.Callable[P, R]) -> ty.Callable[P, R]: ...
+
+    def register[
+        **P, R
+    ](self, handler: type[R] | ty.Callable[P, R]) -> type[R] | ty.Callable[P, R]: ...
+
+    @ty.overload
+    def __call__[T](self, handler: type[T]) -> type[T]: ...
+
+    @ty.overload
+    def __call__[**P, R](self, handler: ty.Callable[P, R]) -> ty.Callable[P, R]: ...
+
+    def __call__[
+        **P, R
+    ](self, handler: type[R] | ty.Callable[P, R]) -> type[R] | ty.Callable[P, R]:
+        return self.register(handler)
+
+
+class ListenerRegistry[Event](RegistryBase[Event]):
     def __init__(self, message_type: type[Event]):
-        super().__init__(DependencyGraph())
-        self._message_type = message_type
+        super().__init__(message_type)
         self._mapping: ListenerMapping[Event] = {}
 
     def __iter__(self):
@@ -33,13 +58,21 @@ class ListenerRegistry[Event](RegistryBase):
         for msg_type, listener_metas in items:
             yield (msg_type, listener_metas)
 
-    def register(self, handler: Target):
+    @ty.overload
+    def register[T](self, handler: type[T]) -> type[T]: ...
+
+    @ty.overload
+    def register[**P, R](self, handler: ty.Callable[P, R]) -> ty.Callable[P, R]: ...
+
+    @ty.override
+    def register[
+        **P, R
+    ](self, handler: type[R] | ty.Callable[P, R]) -> type[R] | ty.Callable[P, R]:
         mappings = collect_listeners(self._message_type, handler)
 
         for msg_type, metas in mappings.items():
             if msg_type not in self._mapping:
                 self._mapping[msg_type] = list()
-
             for i, meta in enumerate(metas):
                 if isinstance(meta, MethodMeta):
                     self._graph.node(ignore=msg_type)(meta.owner_type)
@@ -49,14 +82,13 @@ class ListenerRegistry[Event](RegistryBase):
                     metas[i] = FuncMeta(message_type=msg_type, handler=entry)
             self._mapping[msg_type].extend(metas)
 
+        return handler
 
-class HandlerRegistry[Message](RegistryBase):
-    "A pure container that collects handlers"
 
-    def __init__(self, message_type: type[Message]):
-        super().__init__(DependencyGraph())
-        self._message_type = message_type
-        self._mapping: HandlerMapping[Message] = {}
+class HandlerRegistry[Command](RegistryBase[Command]):
+    def __init__(self, message_type: type[Command]):
+        super().__init__(message_type)
+        self._mapping: HandlerMapping[Command] = {}
 
     def __iter__(self):
         items = self._mapping.items()
@@ -69,6 +101,7 @@ class HandlerRegistry[Message](RegistryBase):
     @ty.overload
     def register[**P, R](self, handler: ty.Callable[P, R]) -> ty.Callable[P, R]: ...
 
+    @ty.override
     def register(self, handler: Target):
         mappings = collect_handlers(self._message_type, handler)
         for msg_type, meta in mappings.items():
@@ -86,10 +119,10 @@ class HandlerRegistry[Message](RegistryBase):
 
 
 # @lru_cache
-def command_registry[C](msg_type: type[C]) -> HandlerRegistry[C]:
+def handler_registry[C](msg_type: type[C]) -> HandlerRegistry[C]:
     return HandlerRegistry[C](msg_type)
 
 
 # @lru_cache
-def event_registry[E](msg_type: type[E]) -> ListenerRegistry[E]:
+def listener_registry[E](msg_type: type[E]) -> ListenerRegistry[E]:
     return ListenerRegistry[E](msg_type)
