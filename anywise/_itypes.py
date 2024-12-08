@@ -9,6 +9,7 @@ type ListenerMapping[E] = dict[type[E], list[CallableMeta[E]]]
 class CallableMeta[Message]:
     message_type: type[Message]
     handler: ty.Callable[[Message], ty.Any]
+    is_async: bool
 
 
 @dataclass(frozen=True, slots=True)

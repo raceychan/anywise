@@ -1,3 +1,4 @@
+import inspect
 import typing as ty
 
 from ididi import DependencyGraph, INode
@@ -45,6 +46,9 @@ class RegistryBase[Message]:
     def __call__[
         **P, R
     ](self, handler: type[R] | ty.Callable[P, R]) -> type[R] | ty.Callable[P, R]:
+        """
+        register a class or a function
+        """
         return self.register(handler)
 
 
@@ -79,7 +83,10 @@ class ListenerRegistry[Event](RegistryBase[Event]):
                 else:
                     listener = meta.handler
                     entry = self._graph.entry(ignore=msg_type)(listener)
-                    metas[i] = FuncMeta(message_type=msg_type, handler=entry)
+                    is_async: bool = inspect.iscoroutinefunction(listener)
+                    metas[i] = FuncMeta(
+                        message_type=msg_type, handler=entry, is_async=is_async
+                    )
             self._mapping[msg_type].extend(metas)
 
         return handler
@@ -110,7 +117,10 @@ class HandlerRegistry[Command](RegistryBase[Command]):
                 self._graph.node(ignore=msg_type)(meta.owner_type)
             else:
                 entry = self._graph.entry(ignore=msg_type)(f)
-                mappings[msg_type] = FuncMeta(message_type=msg_type, handler=entry)
+                is_async: bool = inspect.iscoroutinefunction(f)
+                mappings[msg_type] = FuncMeta(
+                    message_type=msg_type, handler=entry, is_async=is_async
+                )
         self._mapping.update(mappings)
         return handler
 

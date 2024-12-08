@@ -4,6 +4,7 @@ import typing as ty
 from collections import defaultdict
 
 from ._itypes import CallableMeta, FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
+from .errors import MessageNotFoundError, NotSupportedHandlerTypeError
 
 type Target = type | ty.Callable[..., ty.Any]
 
@@ -45,7 +46,10 @@ def collect_exceptions[**P, T](func: ty.Callable[P, T]) -> list[Exception]:
 
 def _extract_from_function[
     Message
-](message_type: type[Message], handler: ty.Callable[..., ty.Any]) -> CallableMeta[
+](
+    message_type: type[Message],
+    handler: ty.Callable[..., ty.Any],
+) -> CallableMeta[
     Message
 ]:
     sig = inspect.signature(handler)
@@ -54,9 +58,11 @@ def _extract_from_function[
         if param_type is sig.empty:
             continue
         if inspect.isclass(param_type) and issubclass(param_type, message_type):
-            return FuncMeta(param_type, handler)
-    else:
-        raise Exception(f"no subcommand found in {handler}")
+            is_async: bool = inspect.iscoroutinefunction(handler)
+            return FuncMeta(param_type, handler, is_async=is_async)
+    raise MessageNotFoundError(
+        f"can't find param of type `{message_type}` in {handler} signature"
+    )
 
 
 def _extract_from_class[
@@ -66,14 +72,21 @@ def _extract_from_class[
     for method_name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
         if method_name.startswith("_"):
             continue
-        func_meta = _extract_from_function(base_msg_type, method)
+        try:
+            func_meta = _extract_from_function(base_msg_type, method)
+        except MessageNotFoundError:
+            continue
         message_type = func_meta.message_type
         container = MethodMeta[Message](
             message_type=message_type,
             handler=func_meta.handler,
+            is_async=func_meta.is_async,
             owner_type=cls,
         )
         handlers.append(container)
+
+    if not handlers:
+        raise MessageNotFoundError(f"{cls} does not have any handler")
     return handlers
 
 
@@ -96,7 +109,7 @@ def collect_handlers[
             mapping[meta.message_type] = meta
     else:
         # TODO: extract from module
-        raise Exception("Handler Not Supported")
+        raise NotSupportedHandlerTypeError("Handler Not Supported")
     return mapping
 
 
