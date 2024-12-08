@@ -4,21 +4,30 @@ from types import MethodType
 
 from ididi import DependencyGraph
 
-from .mark import FuncMeta, HandlerRegistry, MethodMeta, ResolvedFunc
+from ._itypes import CallableMeta
+from ._registry import HandlerRegistry, ListenerRegistry, MethodMeta, RegistryBase
 
-# async def ask(self, msg) -> R: ...
+# class WorkUnit[Context, Message]:
+#     type Handler = ty.Callable[[Context, Message], Context]
+
+#     def __init__(self, context: Context, message_type: type[Message], handler: Handler):
+#         self.context = context
+#         self.message_type = message_type
+#         self.handler = handler
 
 
 class Worker[Message]:
     def __init__(
         self,
-        anywise: "AnyWise[Message]",
-        handler_detail: FuncMeta[Message],
+        anywise: "AnyWise",  # Message here should be a contravariant
+        meta: CallableMeta[Message],
     ):
         self._anywise = anywise
-        self._meta = handler_detail
-        self._handler: ResolvedFunc[Message] | None = None
+        self._meta = meta
+        self._handler: ty.Callable[[Message], ty.Any] | None = None
 
+    # type Context = dict[str, Any]
+    # handle(self, context: Context, msg: Message)
     def handle(self, msg: Message):
         if self._handler:
             return self._handler(msg)
@@ -33,9 +42,22 @@ class Worker[Message]:
         return self._handler(msg)
 
 
-class AnyWise[MessageType]:
-    _handlers: dict[type, Worker[MessageType]]
-    _subscribes: defaultdict[type, list[Worker[MessageType]]]
+# class AsyncWorker:
+# ...
+
+
+# class AsyncWise[MessageType]:
+#     ...
+
+"""
+class Sender: ...
+class Publisher: ...
+"""
+
+
+class AnyWise:
+    _handlers: dict[type, Worker[ty.Any]]
+    _subscribes: defaultdict[type, list[Worker[ty.Any]]]
 
     def __init__(
         self,
@@ -47,27 +69,37 @@ class AnyWise[MessageType]:
         self._subscribes = defaultdict(list)
         self._dg.register_dependent(self, self.__class__)
 
-    def merge_registries(self, registries: ty.Sequence[HandlerRegistry[MessageType]]):
+    def _include_handlers(self, registry: HandlerRegistry[ty.Any]):
+        for msg_type, handler_meta in registry:
+            self._handlers[msg_type] = Worker[ty.Any](self, handler_meta)
+
+    def _include_listeners(self, registry: ListenerRegistry[ty.Any]):
+        for msg_type, listener_metas in registry:
+            if msg_type not in self._subscribes:
+                self._subscribes[msg_type] = list()
+            workers = [Worker[ty.Any](self, meta) for meta in listener_metas]
+            self._subscribes[msg_type].extend(workers)
+
+    def include(
+        self,
+        registries: ty.Sequence[HandlerRegistry[ty.Any] | ListenerRegistry[ty.Any]],
+    ):
         for registry in registries:
             self._dg.merge(registry.graph)
-            for msg_type, handler_meta in registry:
-                self._handlers[msg_type] = Worker[MessageType](self, handler_meta)
+            if isinstance(registry, HandlerRegistry):
+                self._include_handlers(registry)
+            else:
+                self._include_listeners(registry)
         self._dg.static_resolve_all()
 
     def resolve[T](self, dep_type: type[T]) -> T:
         return self._dg.resolve(dep_type)
 
-    def send(self, msg: MessageType) -> None:
+    def send(self, msg: ty.Any) -> ty.Any:
         worker = self._handlers[type(msg)]
         return worker.handle(msg)
 
-    async def publish(self, msg: MessageType, concurrent: bool = False) -> None:
-        """
-        if concurrent
-        """
+    def publish(self, msg: ty.Any) -> None:
         subscribers = self._subscribes[type(msg)]
-
         for sub in subscribers:
-            await sub.handle(msg)
-            # if event.to_sink:
-            # await self._event_sink.write(event)
+            sub.handle(msg)

@@ -1,37 +1,28 @@
-import types
 import typing as ty
+from dataclasses import dataclass
 
-# from uuid import uuid4
-
-
-class ICommand: ...
-
-
-class IQuery[R]: ...
+type HandlerMapping[Command] = dict[type[Command], "CallableMeta[Command]"]
+type ListenerMapping[E] = dict[type[E], list[CallableMeta[E]]]
 
 
-class IEvent: ...
+@dataclass(frozen=True, slots=True)
+class CallableMeta[Message]:
+    message_type: type[Message]
+    handler: ty.Callable[[Message], ty.Any]
 
 
-type CommandHandler[C] = ty.Callable[[C], ty.Coroutine[ty.Any, ty.Any, None]]
-type QueryHandler[Q, R] = ty.Callable[[Q], ty.Coroutine[ty.Any, ty.Any, R]]
-type EventHandler[E] = ty.Callable[[E], ty.Coroutine[ty.Any, ty.Any, None]]
-type Handler[P, R] = CommandHandler[P] | QueryHandler[P, R] | EventHandler[P]
-type Message[R] = ICommand | IQuery[R] | IEvent
+@dataclass(frozen=True, slots=True)
+class FuncMeta[Message](CallableMeta[Message]):
+    """
+    is_async: bool
+    is_contexted:
+    whether to pass a context object to handler
+    """
 
 
-class AnyWised(ty.Protocol):
-    __anywised__: bool
-
-
-def anywise(t: types.ModuleType | ty.Callable | type) -> ty.TypeGuard[AnyWised]:
-    setattr(t, "__anywised__", True)
-    return t
-
-
-class IHandler(ty.Protocol):
-
-    def __call__(self, command: ICommand) -> None: ...
+@dataclass(frozen=True, slots=True)
+class MethodMeta[Message](CallableMeta[Message]):
+    owner_type: type
 
 
 class Result[T, E]:
