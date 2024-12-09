@@ -1,5 +1,5 @@
 import typing as ty
-from asyncio import TaskGroup, to_thread
+from asyncio import to_thread
 from collections import defaultdict
 from functools import partial
 from types import MethodType
@@ -10,10 +10,11 @@ from ._itypes import CallableMeta
 from ._registry import HandlerRegistry, ListenerRegistry, MethodMeta
 
 
+
 class AsyncWorker[Message]:
     def __init__(
         self,
-        anywise: "AnyWise",  # Message here should be a contravariant
+        anywise: "AnyWise",
         meta: CallableMeta[Message],
     ):
         self._anywise = anywise
@@ -21,8 +22,10 @@ class AsyncWorker[Message]:
         self._is_async = self._meta.is_async
         self._handler: ty.Callable[[Message], ty.Any] | None = None
 
+    # TODO: guard
+
     # type Context = dict[str, Any]
-    # handle(self, context: Context, msg: Message)
+    # handle(self, context: Context, msg: Message, next: Guard)
     async def handle(self, msg: Message) -> ty.Any:
         if self._handler:
             return await self._handler(msg)
@@ -76,13 +79,6 @@ class Publisher:
         subscribers = self._subscribers[type(msg)]
         for sub in subscribers:
             await sub.handle(msg)
-
-
-class ConcurrentPublisher(Publisher):
-    async def publish(self, msg: ty.Any) -> None:
-        subscribers = self._subscribers[type(msg)]
-        async with TaskGroup() as tg:
-            [tg.create_task(sub.handle(msg)) for sub in subscribers]
 
 
 class AnyWise:

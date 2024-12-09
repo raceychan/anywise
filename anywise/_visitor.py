@@ -1,12 +1,12 @@
 import ast
 import inspect
-import typing as ty
 from collections import defaultdict
+from typing import Any, Callable
 
 from ._itypes import CallableMeta, FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
 from .errors import MessageNotFoundError, NotSupportedHandlerTypeError
 
-type Target = type | ty.Callable[..., ty.Any]
+type Target = type | Callable[..., Any]
 
 
 class ExceptionFinder(ast.NodeVisitor):
@@ -24,12 +24,7 @@ class ExceptionFinder(ast.NodeVisitor):
         self.generic_visit(node)
 
 
-def collect_exceptions[**P, T](func: ty.Callable[P, T]) -> list[Exception]:
-    """
-    TODO: recursively search for function call,
-    diffierentiate customized exception and builtin exception
-    only collect customized exception
-    """
+def collect_exceptions[**P, T](func: Callable[P, T]) -> list[Exception]:
     source = inspect.getsource(func)
     tree = ast.parse(source)
     finder = ExceptionFinder()
@@ -46,12 +41,7 @@ def collect_exceptions[**P, T](func: ty.Callable[P, T]) -> list[Exception]:
 
 def _extract_from_function[
     Message
-](
-    message_type: type[Message],
-    handler: ty.Callable[..., ty.Any],
-) -> CallableMeta[
-    Message
-]:
+](message_type: type[Message], handler: Callable[..., Any],) -> CallableMeta[Message]:
     sig = inspect.signature(handler)
     for param in sig.parameters.values():
         param_type = param.annotation
@@ -69,7 +59,8 @@ def _extract_from_class[
     Message
 ](base_msg_type: type[Message], cls: type) -> list[CallableMeta[Message]]:
     handlers: list[CallableMeta[Message]] = []
-    for method_name, method in inspect.getmembers(cls, predicate=inspect.isfunction):
+    cls_members = inspect.getmembers(cls, predicate=inspect.isfunction)
+    for method_name, method in cls_members:
         if method_name.startswith("_"):
             continue
         try:
@@ -115,9 +106,9 @@ def collect_handlers[
 
 def collect_listeners[
     Message
-](
-    message_type: type[Message], target: type | ty.Callable[..., ty.Any]
-) -> ListenerMapping[Message]:
+](message_type: type[Message], target: type | Callable[..., Any]) -> ListenerMapping[
+    Message
+]:
     """
     TODO: collect from module, package, project
     if target is None, collect current module
@@ -135,11 +126,14 @@ def collect_listeners[
     return mapping
 
 
-# def auto_collect(msg_type: type, dir: pathlib.Path):
-#     """
-#     scan through dir, looking for function / methods
-#     that contain subclass of msg_type as param of signature
-#     record its return type
-#     constrcut a anywise.pyi stub file along the way
-#     """
-#     ...
+# def _extract_from_module(base_msg_type: type, module: ModuleType):
+# from types import ModuleType
+# handlers: defaultdict[type, list[CallableMeta]] = defaultdict(list)
+# predict: Callable[[Any], bool] = lambda m: inspect.isclass(m) or inspect.isfunction(m)
+# moduel_members = inspect.getmembers(module, predicate=predict)
+# for name, member in moduel_members:
+# if name.startswith("_"):
+# continue
+# ...
+
+

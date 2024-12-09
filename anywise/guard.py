@@ -1,51 +1,60 @@
-import typing as ty
+from typing import Any, Callable
 
 """
-provide a mechanism that
-
-1. execute before the handler, return nothing
-2. wrap the handler, works like a decorator
+reference:
+https://www.starlette.io/middleware/#pure-asgi-middleware
 """
 
-type State = dict[str, ty.Any]
-type Message = ty.Any
-type Handler = ty.Callable[[Message], ty.Any]
-
-
-type MessageGuard = ty.Callable[[State, Message], State]
+# type Context = MutableMapping[str, Any]
 
 """
-State is a mutable object that carry state
-guard can use it to store side-effects of functions
+class AuthContext(TypedDict):
+    token: str
+    user: User
+
+@guard(UserCommand)
+class AuthService:
+    def validate_user(context: AuthContext, command: UserCommand):
+        user = self._get_user(context.token.sub)
+        if user.user_id != command.user_id:
+            raise ValidationError
+        context["user"] = user
 """
 
-
-class Guard[MessageType]:
-    def __init__(self, guard: MessageGuard): ...
-
-    def __call__(self, message: MessageType): ...
+type GuardFunc = Callable[[Any, dict[str, Any]], Any]
+type PostHandle = Callable[[Any, dict[str, Any], Any], Any]
 
 
-# this acts like a decorator
-class Interceptor[MessageType]:
-    def __init__(self, message_type: MessageType):
-        self.message_type = message_type
+class Guard:
+    def __init__(
+        self,
+        nxt: GuardFunc,
+        *,
+        pre_handle: GuardFunc | None = None,
+        post_handle: PostHandle | None = None,
+    ):
+        self.nxt = nxt
 
-    def __call__[
-        **P, R
-    ](self, next: ty.Callable[P, R], *args: P.args, **kwargs: P.kwargs,):
-        resp = next(*args, **kwargs)
+        self.pre_handle = pre_handle
+        self.post_handle = post_handle
+
+    async def __call__(self, message: Any, context: dict[str, Any]) -> Any:
+        # we should accept handler here so we can add decorator to it
+        response = await self.nxt(message, context)
+        if self.post_handle:
+            return self.post_handle(message, context, response)
+        return response
 
 
-# premier = compose(logging, caching, timeout, retry)
+class MarkGuard(Guard):
+    async def __call__(self, message: Any, context: dict[str, Any]) -> Any:
+        if not context.get("processed_by"):
+            context["processed_by"] = [self]
+        else:
+            context["processed_by"].append(self)
 
-# can we add guard as well?
-# product_handler.add_interceptors(
-#   [logging, caching, timeout]
-# )
-
-# async def dispatch(self, message: MessageType, call_next: HandlerFunction):
-# response = await call_next(request)
+        resp = await super().__call__(message, context)
+        return resp
 
 
 """

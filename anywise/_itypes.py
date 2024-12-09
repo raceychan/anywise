@@ -10,6 +10,7 @@ class CallableMeta[Message]:
     message_type: type[Message]
     handler: ty.Callable[[Message], ty.Any]
     is_async: bool
+    # is_contexted: bool
 
 
 @dataclass(frozen=True, slots=True)
