@@ -2,7 +2,12 @@
 
 ## Versions
 
-### version 0.2.0
+### version 0.1.1
+
+- contexted handler
+- command guard
+
+### version 1.0.0
 
 - create a cli stub generator for anywise.send, something like
 

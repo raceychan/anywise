@@ -28,37 +28,41 @@ type PostHandle = Callable[[Any, dict[str, Any], Any], Any]
 class Guard:
     def __init__(
         self,
-        nxt: GuardFunc,
+        nxt: GuardFunc | None = None,
         *,
         pre_handle: GuardFunc | None = None,
         post_handle: PostHandle | None = None,
     ):
         self.nxt = nxt
-
         self.pre_handle = pre_handle
         self.post_handle = post_handle
 
     async def __call__(self, message: Any, context: dict[str, Any]) -> Any:
         # we should accept handler here so we can add decorator to it
-        response = await self.nxt(message, context)
-        if self.post_handle:
-            return self.post_handle(message, context, response)
-        return response
+        if self.pre_handle:
+            await self.pre_handle(message, context)
+
+        if self.nxt:
+            response = await self.nxt(message, context)
+            if self.post_handle:
+                return await self.post_handle(message, context, response)
+            return response
+
+    def bind(self, command: type | list[type]): ...
 
 
 class MarkGuard(Guard):
-    async def __call__(self, message: Any, context: dict[str, Any]) -> Any:
+    def __init__(self, nxt: GuardFunc):
+        super().__init__(nxt, pre_handle=self.pre_handle)
+
+    def pre_handle(self, message: Any, context: dict[str, Any]) -> Any:
         if not context.get("processed_by"):
             context["processed_by"] = [self]
         else:
             context["processed_by"].append(self)
 
-        resp = await super().__call__(message, context)
-        return resp
-
 
 """
-
 class AuthService:
     def validate_user(self):
         ...
@@ -69,7 +73,6 @@ user_handler = mark(UserCommand)
 @user_handler
 class UserService:
 
-    @user_handler.guard(AuthService.validate_user)
     async def remove_user(self, cmd: RemoveUser):
         ...
 

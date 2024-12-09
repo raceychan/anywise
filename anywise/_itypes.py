@@ -4,16 +4,17 @@ from dataclasses import dataclass
 type HandlerMapping[Command] = dict[type[Command], "CallableMeta[Command]"]
 type ListenerMapping[E] = dict[type[E], list[CallableMeta[E]]]
 
+type ContextedHandler = ty.Callable[[ty.Any, dict[str, ty.Any]], ty.Any]
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class CallableMeta[Message]:
     message_type: type[Message]
-    handler: ty.Callable[[Message], ty.Any]
+    handler: ty.Callable[[Message], ty.Any] | ContextedHandler
     is_async: bool
-    # is_contexted: bool
+    is_contexted: bool
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class FuncMeta[Message](CallableMeta[Message]):
     """
     is_async: bool
@@ -22,7 +23,7 @@ class FuncMeta[Message](CallableMeta[Message]):
     """
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class MethodMeta[Message](CallableMeta[Message]):
     owner_type: type
 

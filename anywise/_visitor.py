@@ -43,13 +43,34 @@ def _extract_from_function[
     Message
 ](message_type: type[Message], handler: Callable[..., Any],) -> CallableMeta[Message]:
     sig = inspect.signature(handler)
+
+    is_async: bool = False
+    meta = None
+
     for param in sig.parameters.values():
         param_type = param.annotation
         if param_type is sig.empty:
             continue
         if inspect.isclass(param_type) and issubclass(param_type, message_type):
             is_async: bool = inspect.iscoroutinefunction(handler)
-            return FuncMeta(param_type, handler, is_async=is_async)
+            meta = FuncMeta(
+                message_type=param_type,
+                handler=handler,
+                is_async=is_async,
+                is_contexted=False,
+            )
+        if param.name == "context":
+            if meta:
+                meta = FuncMeta[Any](
+                    message_type=meta.message_type,
+                    handler=meta.handler,
+                    is_async=meta.is_async,
+                    is_contexted=True,
+                )
+                return meta
+
+    if meta:
+        return meta
     raise MessageNotFoundError(
         f"can't find param of type `{message_type}` in {handler} signature"
     )
@@ -71,8 +92,9 @@ def _extract_from_class[
         container = MethodMeta[Message](
             message_type=message_type,
             handler=func_meta.handler,
-            is_async=func_meta.is_async,
             owner_type=cls,
+            is_async=func_meta.is_async,
+            is_contexted=func_meta.is_contexted,
         )
         handlers.append(container)
 
@@ -135,5 +157,3 @@ def collect_listeners[
 # if name.startswith("_"):
 # continue
 # ...
-
-

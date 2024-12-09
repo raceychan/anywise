@@ -6,45 +6,83 @@ from types import MethodType
 
 from ididi import DependencyGraph
 
-from ._itypes import CallableMeta
-from ._registry import HandlerRegistry, ListenerRegistry, MethodMeta
+from ._itypes import CallableMeta, ContextedHandler
+from ._registry import GuardRegistry, HandlerRegistry, ListenerRegistry, MethodMeta
+from .guard import Guard
 
 
-
-class AsyncWorker[Message]:
+class AsyncHandler:
     def __init__(
         self,
         anywise: "AnyWise",
-        meta: CallableMeta[Message],
+        meta: CallableMeta[ty.Any],
     ):
         self._anywise = anywise
         self._meta = meta
+        self._handler: ty.Callable[[ty.Any], ty.Any] = self._meta.handler
         self._is_async = self._meta.is_async
-        self._handler: ty.Callable[[Message], ty.Any] | None = None
+        self._is_contexted = self._meta.is_contexted
+        self._is_solved = False
 
-    # TODO: guard
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._handler})"
 
-    # type Context = dict[str, Any]
-    # handle(self, context: Context, msg: Message, next: Guard)
-    async def handle(self, msg: Message) -> ty.Any:
-        if self._handler:
-            return await self._handler(msg)
-
-        msg_handler = self._meta.handler
+    async def __call__(self, message: ty.Any) -> ty.Any:
+        if self._is_solved:
+            return await self._handler(message)
 
         if isinstance(self._meta, MethodMeta):
             instance: ty.Any = await self._anywise.resolve(self._meta.owner_type)
-            self._handler = MethodType(msg_handler, instance)
-        else:
-            if self._is_async:
-                self._handler = msg_handler
-            else:
-                self._handler = partial(to_thread, msg_handler)
-        return await self._handler(msg)
+            self._handler = MethodType(self._handler, instance)
+        elif not self._is_async:
+            self._handler = partial(to_thread, self._handler)
+
+        self._is_solved = True
+        return await self._handler(message)
+
+
+class ContextHandler:
+
+    def __init__(
+        self,
+        anywise: "AnyWise",
+        meta: CallableMeta[ty.Any],
+    ):
+        self._anywise = anywise
+        self._meta = meta
+        self._handler: ContextedHandler = self._meta.handler
+        self._is_async = self._meta.is_async
+        self._is_solved: bool = False
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self._handler})"
+
+    async def __call__(self, message: ty.Any, context: dict[str, ty.Any]) -> ty.Any:
+        if self._is_solved:
+            return await self._handler(message, context)
+
+        if isinstance(self._meta, MethodMeta):
+            instance: ty.Any = await self._anywise.resolve(self._meta.owner_type)
+            self._handler = MethodType(self._handler, instance)
+        elif not self._is_async:
+            self._handler = partial(to_thread, self._handler)
+
+        self._is_solved = True
+        return await self._handler(message, context)
+
+
+def create_handler(
+    anywise: "AnyWise",
+    meta: CallableMeta[ty.Any],
+) -> AsyncHandler | ContextHandler:
+    if meta.is_contexted:
+        return ContextHandler(anywise=anywise, meta=meta)
+    else:
+        return AsyncHandler(anywise, meta)
 
 
 class Sender:
-    _handlers: dict[type, AsyncWorker[ty.Any]]
+    _handlers: dict[type, AsyncHandler | ContextHandler | Guard]
 
     def __init__(self, anywise: "AnyWise"):
         self._anywise = anywise
@@ -52,15 +90,32 @@ class Sender:
 
     def include(self, registry: HandlerRegistry[ty.Any]) -> None:
         for msg_type, handler_meta in registry:
-            self._handlers[msg_type] = AsyncWorker[ty.Any](self._anywise, handler_meta)
+            handler = create_handler(self._anywise, handler_meta)
+            self._handlers[msg_type] = handler
 
     async def send(self, msg: ty.Any) -> ty.Any:
         worker = self._handlers[type(msg)]
-        return await worker.handle(msg)
+
+        if isinstance(worker, (ContextHandler, Guard)):
+            return await worker(msg, dict())
+        else:
+            return await worker(msg)
+
+    def include_guards(self, registry: GuardRegistry):
+        for msg_type, guards in registry:
+            if not (handler := self._handlers.get(msg_type)):
+                continue
+
+            base = handler
+            for guard in guards:
+                guard.nxt = base
+                base = guard
+
+            self._handlers[msg_type] = base
 
 
 class Publisher:
-    _subscribers: defaultdict[type, list[AsyncWorker[ty.Any]]]
+    _subscribers: defaultdict[type, list[AsyncHandler | ContextHandler]]
 
     def __init__(self, anywise: "AnyWise"):
         self._anywise = anywise
@@ -70,15 +125,16 @@ class Publisher:
         for msg_type, listener_metas in registry:
             if msg_type not in self._subscribers:
                 self._subscribers[msg_type] = list()
-            workers = [
-                (AsyncWorker[ty.Any](self._anywise, meta)) for meta in listener_metas
-            ]
+            workers = [(create_handler(self._anywise, meta)) for meta in listener_metas]
             self._subscribers[msg_type].extend(workers)
 
     async def publish(self, msg: ty.Any) -> None:
         subscribers = self._subscribers[type(msg)]
         for sub in subscribers:
-            await sub.handle(msg)
+            if isinstance(sub, ContextHandler):
+                await sub(msg, dict())
+            else:
+                await sub(msg)
 
 
 class AnyWise:
@@ -96,12 +152,17 @@ class AnyWise:
 
     def include(
         self,
-        registries: ty.Sequence[HandlerRegistry[ty.Any] | ListenerRegistry[ty.Any]],
+        registries: ty.Sequence[
+            HandlerRegistry[ty.Any] | GuardRegistry | ListenerRegistry[ty.Any]
+        ],
     ):
         for registry in registries:
-            self._dg.merge(registry.graph)
+            if registry.graph:
+                self._dg.merge(registry.graph)
             if isinstance(registry, HandlerRegistry):
                 self._sender.include(registry)
+            elif isinstance(registry, GuardRegistry):
+                self._sender.include_guards(registry)
             else:
                 self._publisher.include(registry)
         self._dg.static_resolve_all()
