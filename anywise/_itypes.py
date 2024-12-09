@@ -1,15 +1,14 @@
-import typing as ty
 from dataclasses import dataclass
+from typing import Any, Callable, Literal, TypeGuard
 
 type HandlerMapping[Command] = dict[type[Command], "CallableMeta[Command]"]
 type ListenerMapping[E] = dict[type[E], list[CallableMeta[E]]]
 
-type ContextedHandler = ty.Callable[[ty.Any, dict[str, ty.Any]], ty.Any]
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CallableMeta[Message]:
     message_type: type[Message]
-    handler: ty.Callable[[Message], ty.Any] | ContextedHandler
+    handler: Callable[..., Any]
     is_async: bool
     is_contexted: bool
 
@@ -41,7 +40,7 @@ class _Missed:
     def __str__(self) -> str:
         return "MISSING"
 
-    def __bool__(self) -> ty.Literal[False]:
+    def __bool__(self) -> Literal[False]:
         return False
 
 
@@ -50,5 +49,5 @@ MISSING = _Missed()
 type Maybe[T] = T | _Missed
 
 
-def is_provided[T](obj: Maybe[T]) -> ty.TypeGuard[T]:
+def is_provided[T](obj: Maybe[T]) -> TypeGuard[T]:
     return obj is not MISSING

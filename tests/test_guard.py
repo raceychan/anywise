@@ -24,6 +24,14 @@ async def mark(create_user: CreateUser, context: dict[str, ty.Any]) -> None:
         context["processed_by"].append("1")
 
 
+@guard_maker.register(CreateUser)  # pre handle
+async def timer(create_user: CreateUser, context: dict[str, ty.Any]) -> None:
+    if not context.get("processed_by"):
+        context["processed_by"] = ["2"]
+    else:
+        context["processed_by"].append("2")
+
+
 async def test_guard():
     aw = AnyWise()
     aw.include([cmd_handler, guard_maker])

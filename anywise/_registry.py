@@ -229,3 +229,11 @@ class GuardRegistry:
             return func
 
         return receive
+
+    def build_guard(self, message_type: type, handler: GuardFunc | Guard) -> Guard:
+        guards = self._guards[message_type]
+        base = handler
+        for guard in reversed(guards):
+            guard.nxt = base
+            base = guard
+        return base
