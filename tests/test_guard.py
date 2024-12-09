@@ -3,7 +3,7 @@ import typing as ty
 from anywise import AnyWise, handler_registry
 
 # from anywise.guard import MarkGuard
-from anywise._registry import GuardFunc, GuardRegistry
+from anywise._registry import GuardRegistry
 from tests.conftest import CreateUser
 
 guard_maker = GuardRegistry()
@@ -16,7 +16,7 @@ async def handler_str(create_user: CreateUser, context: dict[str, ty.Any]):
     return "done"
 
 
-@guard_maker.register(CreateUser)  # pre handle
+@guard_maker.pre_handle(CreateUser)  # pre handle
 async def mark(create_user: CreateUser, context: dict[str, ty.Any]) -> None:
     if not context.get("processed_by"):
         context["processed_by"] = ["1"]
@@ -24,12 +24,19 @@ async def mark(create_user: CreateUser, context: dict[str, ty.Any]) -> None:
         context["processed_by"].append("1")
 
 
-@guard_maker.register(CreateUser)  # pre handle
+@guard_maker.pre_handle(CreateUser)  # pre handle
 async def timer(create_user: CreateUser, context: dict[str, ty.Any]) -> None:
     if not context.get("processed_by"):
         context["processed_by"] = ["2"]
     else:
         context["processed_by"].append("2")
+
+
+@guard_maker.post_handle(CreateUser)
+async def post(
+    create_user: CreateUser, context: dict[str, ty.Any], response: str
+) -> str:
+    return response
 
 
 async def test_guard():

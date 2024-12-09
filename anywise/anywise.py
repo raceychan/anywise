@@ -146,15 +146,20 @@ class AnyWise:
             HandlerRegistry[Any] | GuardRegistry | ListenerRegistry[Any]
         ],
     ):
+        guard_registries: list[GuardRegistry] = []
         for registry in registries:
             if registry.graph:
                 self._dg.merge(registry.graph)
             if isinstance(registry, HandlerRegistry):
                 self._sender.include(registry)
             elif isinstance(registry, GuardRegistry):
-                self._sender.include_guards(registry)
+                guard_registries.append(registry)
             else:
                 self._publisher.include(registry)
+
+        for guard_registry in guard_registries:
+            self._sender.include_guards(guard_registry)
+
         self._dg.static_resolve_all()
 
     async def resolve[T](self, dep_type: type[T]) -> T:

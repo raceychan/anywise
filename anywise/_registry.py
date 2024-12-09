@@ -159,33 +159,6 @@ class HandlerRegistry[Command](RegistryBase[Command]):
 #     def guard(self, message_type: type):
 #         "like middleware in starlette"
 
-#         """
-#         register guard into guard registry
-#         when included in anywise, match handler by command type
-#         a guard of base command will be added to all handlers of subcommand, meaning
-
-#         guard(UserCommand)
-
-#         will be added to handle of CreateUser, UpdateUser, etc.
-
-
-#         class AuthService:
-#             @guard(UserCommand)
-#             def validate_user(self, command: UserCommand, context: AuthContext):
-#                 user = self._get_user(context.token.sub)
-#                 if user.user_id != command.user_id:
-#                     raise ValidationError
-#                 context["user"] = user
-
-#         @guard.pre_handle
-#         def validate_user(self): ...
-
-
-#         auth_guard = guard(AuthGuard, *arsg, **kwargs)
-#         logging_guard = guard(LoggingGuard, *args, **kwargs)
-
-#         auth_guard.bind([UserCommand, ProductCommand])
-#         """
 
 #     def pre_handler(self, func: GuardFunc):
 #         self._mapping[self._message_type] = Guard(pre_handle=func)
@@ -209,25 +182,44 @@ class GuardRegistry:
         for msg_type, guards in mappings:
             yield (msg_type, guards)
 
-    # def pre_handle(self, command_type: type):
-    #     def receive(func: GuardFunc) -> GuardFunc:
-    #         self._pre_handlers[command_type].append(func)
-    #         return func
+    def pre_handle(self, command_type: type):
+        """
+        register guard into guard registry
+        when included in anywise, match handler by command type
+        a guard of base command will be added to all handlers of subcommand, meaning
 
-    #     return receive
+        guard(UserCommand)
 
-    # def post_handle(self, command_type: type):
-    #     def receive(func: PostHandle) -> PostHandle:
-    #         self._post_hanlders[command_type].append(func)
-    #         return func
+        will be added to handle of CreateUser, UpdateUser, etc.
 
-    #     return receive
 
-    def register(self, command_type: type):
+        class AuthService:
+            @guard(UserCommand)
+            def validate_user(self, command: UserCommand, context: AuthContext):
+                user = self._get_user(context.token.sub)
+                if user.user_id != command.user_id:
+                    raise ValidationError
+                context["user"] = user
+
+        @guard.pre_handle
+        def validate_user(self): ...
+
+
+        auth_guard = guard(AuthGuard, *arsg, **kwargs)
+        logging_guard = guard(LoggingGuard, *args, **kwargs)
+        auth_guard.bind([UserCommand, ProductCommand])
+        """
+
         def receive(func: GuardFunc):
             self._guards[command_type].append(Guard(pre_handle=func))
             return func
 
+        return receive
+
+    def post_handle(self, command_type: type):
+        def receive[R](func: PostHandle[R]) -> PostHandle[R]:
+            self._guards[command_type].append(Guard(post_handle=func))
+            return func
         return receive
 
     def build_guard(self, message_type: type, handler: GuardFunc | Guard) -> Guard:

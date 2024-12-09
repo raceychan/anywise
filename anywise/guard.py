@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 """
 reference:
@@ -22,7 +22,7 @@ class AuthService:
 """
 
 type GuardFunc = Callable[[Any, dict[str, Any]], Any]
-type PostHandle = Callable[[Any, dict[str, Any], Any], Any]
+type PostHandle[R] = Callable[[Any, dict[str, Any], R], R | Awaitable[R]]
 
 
 class Guard:
@@ -31,7 +31,7 @@ class Guard:
         nxt: GuardFunc | None = None,
         *,
         pre_handle: GuardFunc | None = None,
-        post_handle: PostHandle | None = None,
+        post_handle: PostHandle[Any] | None = None,
     ):
         self.nxt = nxt
         self.pre_handle = pre_handle
