@@ -1,10 +1,12 @@
 import inspect
+import sys
 from collections import defaultdict
-from typing import Callable, overload
+from types import UnionType
+from typing import Callable, Sequence, Union, cast, get_args, get_origin, overload
 
 from ididi import DependencyGraph, INode
 
-from ._itypes import FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
+from ._itypes import FuncMeta, HandlerMapping, IGuard, ListenerMapping, MethodMeta
 from ._visitor import Target, collect_handlers, collect_listeners
 from .guard import Guard, GuardFunc, PostHandle
 
@@ -16,7 +18,6 @@ from .guard import Guard, GuardFunc, PostHandle
 #     constrcut a anywise.pyi stub file along the way
 #     """
 #     ...
-# from functools import lru_cache
 
 
 # @lru_cache
@@ -140,7 +141,6 @@ class HandlerRegistry[Command](RegistryBase[Command]):
                 self._graph.node(ignore=msg_type)(meta.owner_type)
             else:
                 entry = self._graph.entry(ignore=msg_type)(f)
-
                 mappings[msg_type] = FuncMeta(
                     message_type=msg_type,
                     handler=entry,
@@ -151,81 +151,97 @@ class HandlerRegistry[Command](RegistryBase[Command]):
         return handler
 
 
-# class GuardRegistry[Command](RegistryBase[Command]):
-#     def __init__(self, message_type: type[Command]):
-#         super().__init__(message_type=message_type)
-#         self._mapping: defaultdict[Command, list[GuardFunc]] = defaultdict(list)
-
-#     def guard(self, message_type: type):
-#         "like middleware in starlette"
-
-
-#     def pre_handler(self, func: GuardFunc):
-#         self._mapping[self._message_type] = Guard(pre_handle=func)
-
-#     def bind(self, message_type: type | list[type]):
-#         """
-#         which command this guard belongs to
-#         """
-
-
 class GuardRegistry:
+    """
+    register guard into guard registry
+    when included in anywise, match handler by command type
+    a guard of base command will be added to all handlers of subcommand, meaning
+
+    guard(UserCommand)
+
+    will be added to handle of CreateUser, UpdateUser, etc.
+
+
+    class AuthService:
+        @guard(UserCommand)
+        def validate_user(self, command: UserCommand, context: AuthContext):
+            user = self._get_user(context.token.sub)
+            if user.user_id != command.user_id:
+                raise ValidationError
+            context["user"] = user
+
+    @guard.pre_handle
+    def log_request(command, message): ...
+    """
+
+    # def guard[**P, R](self, guard: Callable[P, R]):
+    #     """
+    #     ## without di
+    #     @guard_maker.guard
+    #     def log_command(message: ty.Any, context):
+    #         ...
+
+    #     Guard(logging_guard)
+
+    #     ## with di
+    #     @guard_maker.guard
+    #     def logging_guard(handler, logger: Logger)->Guard:
+    #         def log_command(message: ty.Any, context):
+    #             ...
+
+    #         return log_command
+    #     Guard(logging_guard)
+    #     """
+
     def __init__(self):
-        # self._pre_handlers: defaultdict[type, list[GuardFunc]] = defaultdict(list)
-        # self._post_hanlders: defaultdict[type, list[PostHandle]] = defaultdict(list)
-        self._guards: defaultdict[type, list[Guard]] = defaultdict(list)
-        self.graph = None
+        self._guards: defaultdict[type, list[IGuard]] = defaultdict(list)
+        self.graph = DependencyGraph()
 
     def __iter__(self):
         mappings = self._guards.items()
-
         for msg_type, guards in mappings:
             yield (msg_type, guards)
 
-    def pre_handle(self, command_type: type):
-        """
-        register guard into guard registry
-        when included in anywise, match handler by command type
-        a guard of base command will be added to all handlers of subcommand, meaning
+    def extract_gurad_target(self, func: GuardFunc | PostHandle) -> Sequence[type]:
+        func_params = list(inspect.signature(func).parameters.values())
 
-        guard(UserCommand)
+        if sys.version_info >= (3, 10):
+            union_meta = (UnionType, Union)
+        else:
+            union_meta = (Union,)
 
-        will be added to handle of CreateUser, UpdateUser, etc.
+        if not func_params:
+            return []
 
+        cmd_param = func_params[0]
 
-        class AuthService:
-            @guard(UserCommand)
-            def validate_user(self, command: UserCommand, context: AuthContext):
-                user = self._get_user(context.token.sub)
-                if user.user_id != command.user_id:
-                    raise ValidationError
-                context["user"] = user
+        cmd_type = cmd_param.annotation
+        if get_origin(cmd_type) in union_meta:
+            cmd_types = get_args(cmd_type)
+        else:
+            cmd_types = [cmd_type]
+        return cmd_types
 
-        @guard.pre_handle
-        def validate_user(self): ...
+    def pre_handle(self, func: GuardFunc):
 
+        # TODO: use func meta
+        for cmdtype in self.extract_gurad_target(func):
+            self._guards[cmdtype].append(Guard(pre_handle=func))
+        return func
 
-        auth_guard = guard(AuthGuard, *arsg, **kwargs)
-        logging_guard = guard(LoggingGuard, *args, **kwargs)
-        auth_guard.bind([UserCommand, ProductCommand])
-        """
+    def post_handle(self, func: PostHandle):
+        # TODO: use func meta
+        for cmdtype in self.extract_gurad_target(func):
+            self._guards[cmdtype].append(Guard(post_handle=func))
+        return func
 
-        def receive(func: GuardFunc):
-            self._guards[command_type].append(Guard(pre_handle=func))
-            return func
-
-        return receive
-
-    def post_handle(self, command_type: type):
-        def receive[R](func: PostHandle[R]) -> PostHandle[R]:
-            self._guards[command_type].append(Guard(post_handle=func))
-            return func
-        return receive
-
-    def build_guard(self, message_type: type, handler: GuardFunc | Guard) -> Guard:
+    def build_guard(self, message_type: type, handler: GuardFunc | IGuard) -> IGuard:
         guards = self._guards[message_type]
         base = handler
         for guard in reversed(guards):
-            guard.nxt = base
+            guard.chain_next(base)
             base = guard
-        return base
+        return cast(IGuard, base)
+
+    def register(self, message_type: type, guard: IGuard) -> None:
+        self._guards[message_type].append(guard)

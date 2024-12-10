@@ -1,8 +1,29 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, TypeGuard
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Literal,
+    MutableMapping,
+    Protocol,
+    TypeGuard,
+)
 
 type HandlerMapping[Command] = dict[type[Command], "CallableMeta[Command]"]
 type ListenerMapping[E] = dict[type[E], list[CallableMeta[E]]]
+
+type GuardFunc = Callable[[Any, dict[str, Any]], Awaitable[Any]]
+type PostHandle = Callable[[Any, dict[str, Any], Any], Awaitable[Any]]
+type GuardContext = MutableMapping[str, Any]
+
+
+class IGuard(Protocol):
+    pre_handle: GuardFunc | None
+    post_handle: PostHandle | None
+
+    def chain_next(self, guard: GuardFunc) -> None: ...
+    def bind(self, command: type | list[type]) -> None: ...
+    async def __call__(self, message: Any, context: dict[str, Any]) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
