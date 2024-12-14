@@ -1,12 +1,15 @@
 from asyncio import TaskGroup
 from typing import Any
 
-from .anywise import Publisher
+from .anywise import EventContext, Handler, Publisher
 
 
 class ConcurrentPublisher(Publisher):
-    async def publish(self, msg: Any) -> None:
+    async def publish(self, msg: Any, context: EventContext) -> None:
         subscribers = self._subscribers[type(msg)]
-        context: dict[str, Any] = dict()
         async with TaskGroup() as tg:
-            [tg.create_task(sub(msg, context)) for sub in subscribers]
+            for sub in subscribers:
+                if isinstance(sub, Handler):
+                    tg.create_task(sub(msg))
+                else:
+                    tg.create_task(sub(msg, context))
