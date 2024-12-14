@@ -1,7 +1,7 @@
 import pytest
 
 from anywise import (
-    AnyWise,
+    Anywise,
     ConcurrentPublisher,
     handler_registry,
     inject,
@@ -23,7 +23,7 @@ user_event_handler = listener_registry(UserEvent)
 
 @user_cmd_handler
 class UserService:
-    def __init__(self, name: str = "test", *, anywise: AnyWise):
+    def __init__(self, name: str = "test", *, anywise: Anywise):
         self.name = name
         self._aw = anywise
 
@@ -39,14 +39,14 @@ class UserService:
         return "hello"
 
 
-def user_service_factory(asynwise: AnyWise) -> "UserService":
+def user_service_factory(asynwise: Anywise) -> "UserService":
     return UserService(name="test", anywise=asynwise)
 
 
 @user_cmd_handler
 async def update_user(
     cmd: UpdateUser,
-    anywise: AnyWise,
+    anywise: Anywise,
     service: UserService = inject(user_service_factory),
 ) -> str:
     assert service.hello() == "hello"
@@ -63,13 +63,13 @@ async def react_to_event(
 
 
 @pytest.fixture(scope="module")
-def asynwise() -> AnyWise:
-    aw = AnyWise(publisher_factory=ConcurrentPublisher)
+def asynwise() -> Anywise:
+    aw = Anywise(publisher_factory=ConcurrentPublisher)
     aw.include([user_cmd_handler, user_event_handler])
     return aw
 
 
-async def test_send_to_method(asynwise: AnyWise):
+async def test_send_to_method(asynwise: Anywise):
     cmd = CreateUser("1", "user")
     res = await asynwise.send(cmd)
     assert res == "hello"
@@ -79,12 +79,12 @@ async def test_send_to_method(asynwise: AnyWise):
     assert res == "goodbye"
 
 
-async def test_send_to_function(asynwise: AnyWise):
+async def test_send_to_function(asynwise: Anywise):
     cmd = UpdateUser("1", "user", "new")
     res = await asynwise.send(cmd)
     assert res == "ok"
 
 
-async def test_event_handler(asynwise: AnyWise):
+async def test_event_handler(asynwise: Anywise):
     event = UserCreated("new_name")
     await asynwise.publish(event)

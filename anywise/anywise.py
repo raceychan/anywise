@@ -16,7 +16,7 @@ class HandlerBase:
     def __init__(
         self,
         *,
-        anywise: "AnyWise",
+        anywise: "Anywise",
         handler: Callable[[Any], Any] | ContextedHandler,
         owner_type: type | None,
         is_contexted: bool = False,
@@ -31,7 +31,7 @@ class HandlerBase:
         return f"{self.__class__.__name__}({self._handler})"
 
     @classmethod
-    def from_meta(cls, anywise: "AnyWise", meta: "CallableMeta[Any]"):
+    def from_meta(cls, anywise: "Anywise", meta: "CallableMeta[Any]"):
         handler = meta.handler
         if not meta.is_async:
             handler = partial(to_thread, cast(Any, handler))
@@ -66,28 +66,22 @@ class Handler(HandlerBase):
         return await cast(Callable[[Any], Any], self._handler)(message)
 
 
-def create_handler(
-    anywise: "AnyWise",
-    meta: CallableMeta[Any],
-) -> Handler:
-    return Handler.from_meta(anywise, meta)
-
-
 class Sender:
     _handlers: dict[type, Handler | IGuard]
 
-    def __init__(self, anywise: "AnyWise"):
+    def __init__(self, anywise: "Anywise"):
         self._anywise = anywise
         self._handlers = {}
 
     def include(self, registry: HandlerRegistry[Any]) -> None:
         for msg_type, handler_meta in registry:
-            handler = create_handler(self._anywise, handler_meta)
+            handler = Handler.from_meta(self._anywise, handler_meta)
             self._handlers[msg_type] = handler
 
-    async def send(self, msg: Any) -> Any:
+    async def send(self, msg: Any, context: dict[str, Any] | None) -> Any:
         worker = self._handlers[type(msg)]
-        return await worker(msg, dict())
+        context = dict() if context is None else context
+        return await worker(msg, context)
 
     def include_guards(self, guard_registry: GuardRegistry):
         for guard_target, guards in guard_registry:
@@ -111,7 +105,7 @@ class Sender:
 class Publisher:
     _subscribers: defaultdict[type, list[Handler]]
 
-    def __init__(self, anywise: "AnyWise"):
+    def __init__(self, anywise: "Anywise"):
         self._anywise = anywise
         self._subscribers = defaultdict(list)
 
@@ -119,17 +113,22 @@ class Publisher:
         for msg_type, listener_metas in registry:
             if msg_type not in self._subscribers:
                 self._subscribers[msg_type] = list()
-            workers = [(create_handler(self._anywise, meta)) for meta in listener_metas]
+            workers = [
+                (Handler.from_meta(self._anywise, meta)) for meta in listener_metas
+            ]
             self._subscribers[msg_type].extend(workers)
 
-    async def publish(self, msg: Any) -> None:
+    async def publish(
+        self, msg: Any, context: MappingProxyType[str, Any] | None
+    ) -> None:
         subscribers = self._subscribers[type(msg)]
-        context: dict[str, Any] = {}
+        context = context or MappingProxyType({})
+
         for sub in subscribers:
             await sub(msg, context)
 
 
-class AnyWise:
+class Anywise:
     def __init__(
         self,
         *,
@@ -167,8 +166,11 @@ class AnyWise:
     async def resolve[T](self, dep_type: type[T]) -> T:
         return await self._dg.aresolve(dep_type)
 
-    async def send(self, msg: Any) -> Any:
-        return await self._sender.send(msg)
+    async def send(self, msg: Any, context: dict[str, Any] | None = None) -> Any:
+        # TODO: iter through handlers of _sender, generate type stub file.
+        return await self._sender.send(msg, context)
 
-    async def publish(self, msg: Any) -> None:
-        await self._publisher.publish(msg)
+    async def publish(
+        self, msg: Any, context: MappingProxyType[str, Any] | None = None
+    ) -> None:
+        await self._publisher.publish(msg, context)

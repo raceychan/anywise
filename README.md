@@ -19,9 +19,14 @@ Documentation: On its way here...
 
 ## Philosophy
 
-1. Non-intrusive
-2. dead simple
-3. minimalist
+1. non-intrusive
+2. minimalism
+
+## Install
+
+```py
+pip install anywise
+```
 
 ## Quck Start
 

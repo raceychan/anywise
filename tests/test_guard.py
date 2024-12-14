@@ -1,6 +1,6 @@
 import typing as ty
 
-from anywise import AnyWise, GuardRegistry, handler_registry
+from anywise import Anywise, GuardRegistry, handler_registry
 
 # from anywise.guard import MarkGuard
 from tests.conftest import CreateUser, UpdateUser, UserCommand
@@ -46,7 +46,7 @@ async def post(
 
 
 async def test_guard():
-    aw = AnyWise()
+    aw = Anywise()
     aw.include([user_registry, guard_registry])
     await aw.send(CreateUser("1", "2"))
     await aw.send(UpdateUser("1", "2", "3"))
