@@ -10,12 +10,11 @@ Documentation: On its way here...
 
 ---
 
-## Goals
+## Rationale
 
-1. isolating bussiness logic from input ports
-2. let you write less code than other wise
-3. promote best practices and clean code
-4. runtime-performance
+1. promote best practices and enterprise architecture in python
+2. isolating bussiness logic from input ports, allowing one app for web api, kafka, flink, etc.
+3. let you write less code than other wise
 
 ## Philosophy
 

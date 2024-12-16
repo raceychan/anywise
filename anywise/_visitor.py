@@ -3,7 +3,7 @@ import inspect
 from collections import defaultdict
 from typing import Any, Callable
 
-from ._itypes import CallableMeta, FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
+from ._itypes import FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
 from .errors import MessageNotFoundError, NotSupportedHandlerTypeError
 
 type Target = type | Callable[..., Any]
@@ -41,7 +41,7 @@ def collect_exceptions[**P, T](func: Callable[P, T]) -> list[Exception]:
 
 def _extract_from_function[
     Message
-](message_type: type[Message], handler: Callable[..., Any],) -> CallableMeta[Message]:
+](message_type: type[Message], handler: Callable[..., Any],) -> FuncMeta[Message]:
     sig = inspect.signature(handler)
 
     is_async: bool = False
@@ -78,8 +78,8 @@ def _extract_from_function[
 
 def _extract_from_class[
     Message
-](base_msg_type: type[Message], cls: type) -> list[CallableMeta[Message]]:
-    handlers: list[CallableMeta[Message]] = []
+](base_msg_type: type[Message], cls: type) -> list[FuncMeta[Message]]:
+    handlers: list[FuncMeta[Message]] = []
     cls_members = inspect.getmembers(cls, predicate=inspect.isfunction)
     for method_name, method in cls_members:
         if method_name.startswith("_"):

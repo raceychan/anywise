@@ -1,8 +1,18 @@
 import inspect
 import sys
 from collections import defaultdict
+from functools import lru_cache
 from types import UnionType
-from typing import Callable, Sequence, Union, cast, get_args, get_origin, overload
+from typing import (
+    Any,
+    Callable,
+    Iterator,
+    Sequence,
+    Union,
+    get_args,
+    get_origin,
+    overload,
+)
 
 from ididi import DependencyGraph, INode
 
@@ -17,17 +27,38 @@ from .guard import Guard, GuardFunc, PostHandle
 #     record its return type
 #     constrcut a anywise.pyi stub file along the way
 #     """
-#     ...
 
 
-# @lru_cache
+@lru_cache
 def handler_registry[C](msg_type: type[C]) -> "HandlerRegistry[C]":
     return HandlerRegistry[C](msg_type)
 
 
-# @lru_cache
+@lru_cache
 def listener_registry[E](msg_type: type[E]) -> "ListenerRegistry[E]":
     return ListenerRegistry[E](msg_type)
+
+
+@overload
+def make_registry[T](*, command_base: type[T]) -> "HandlerRegistry[T]": ...
+
+
+@overload
+def make_registry[T](*, event_base: type[T]) -> "ListenerRegistry[T]": ...
+
+
+def make_registry[
+    T
+](
+    *, command_base: type[T] | None = None, event_base: type[T] | None = None
+) -> "HandlerRegistry[T] | ListenerRegistry[T]":
+    if command_base:
+        return HandlerRegistry(command_base)
+
+    if event_base:
+        return ListenerRegistry(event_base)
+
+    raise Exception("Must provide either base command or base event")
 
 
 class RegistryBase[Message]:
@@ -76,9 +107,7 @@ class ListenerRegistry[Event](RegistryBase[Event]):
         self._mapping: ListenerMapping[Event] = {}
 
     def __iter__(self):
-        items = self._mapping.items()
-        for msg_type, listener_metas in items:
-            yield (msg_type, listener_metas)
+        return iter(self._mapping.items())
 
     @overload
     def register[T](self, handler: type[T]) -> type[T]: ...
@@ -90,7 +119,6 @@ class ListenerRegistry[Event](RegistryBase[Event]):
         **P, R
     ](self, handler: type[R] | Callable[P, R]) -> type[R] | Callable[P, R]:
         mappings = collect_listeners(self._message_type, handler)
-
         for msg_type, metas in mappings.items():
             if msg_type not in self._mapping:
                 self._mapping[msg_type] = list()
@@ -113,7 +141,6 @@ class ListenerRegistry[Event](RegistryBase[Event]):
                         is_contexted=meta.is_contexted,
                     )
             self._mapping[msg_type].extend(metas)
-
         return handler
 
 
@@ -123,9 +150,7 @@ class HandlerRegistry[Command](RegistryBase[Command]):
         self._mapping: HandlerMapping[Command] = {}
 
     def __iter__(self):
-        items = self._mapping.items()
-        for msg_type, funcmeta in items:
-            yield (msg_type, funcmeta)
+        return iter(self._mapping.items())
 
     @overload
     def register[T](self, handler: type[T]) -> type[T]: ...
@@ -174,35 +199,18 @@ class GuardRegistry:
     def log_request(command, message): ...
     """
 
-    # def guard[**P, R](self, guard: Callable[P, R]):
-    #     """
-    #     ## without di
-    #     @guard_maker.guard
-    #     def log_command(message: ty.Any, context):
-    #         ...
-
-    #     Guard(logging_guard)
-
-    #     ## with di
-    #     @guard_maker.guard
-    #     def logging_guard(handler, logger: Logger)->Guard:
-    #         def log_command(message: ty.Any, context):
-    #             ...
-
-    #         return log_command
-    #     Guard(logging_guard)
-    #     """
-
     def __init__(self):
         self._guards: defaultdict[type, list[IGuard]] = defaultdict(list)
-        self.graph = DependencyGraph()
+        self._dg = DependencyGraph()
 
-    def __iter__(self):
-        mappings = self._guards.items()
-        for msg_type, guards in mappings:
-            yield (msg_type, guards)
+    def __iter__(self) -> Iterator[tuple[type, list[IGuard]]]:
+        return iter(self._guards.items())
 
-    def extract_gurad_target(self, func: GuardFunc | PostHandle) -> Sequence[type]:
+    @property
+    def graph(self):
+        return self._dg
+
+    def extract_gurad_target(self, func: GuardFunc | PostHandle[Any]) -> Sequence[type]:
         func_params = list(inspect.signature(func).parameters.values())
 
         if sys.version_info >= (3, 10):
@@ -223,25 +231,41 @@ class GuardRegistry:
         return cmd_types
 
     def pre_handle(self, func: GuardFunc):
-
-        # TODO: use func meta
+        """
+        TODO?: we should transform gurad into funcmeta
+        """
         for cmdtype in self.extract_gurad_target(func):
             self._guards[cmdtype].append(Guard(pre_handle=func))
         return func
 
-    def post_handle(self, func: PostHandle):
-        # TODO: use func meta
+    def post_handle[R](self, func: PostHandle[R]) -> PostHandle[R]:
         for cmdtype in self.extract_gurad_target(func):
             self._guards[cmdtype].append(Guard(post_handle=func))
         return func
 
-    def build_guard(self, message_type: type, handler: GuardFunc | IGuard) -> IGuard:
-        guards = self._guards[message_type]
-        base = handler
-        for guard in reversed(guards):
-            guard.chain_next(base)
-            base = guard
-        return cast(IGuard, base)
-
     def register(self, message_type: type, guard: IGuard) -> None:
         self._guards[message_type].append(guard)
+
+
+class RegistryFacade:
+    """
+    TODO: make a registry facade
+    register handler based on their message type
+
+    user_handler_registry = make_registry(base_command=UserCommand, base_event=UserEvent)
+
+
+    @user_handler_registry
+    async def singup(command: CreateUser): ...
+
+    @user_handler_registry
+    async def notify_user(event: UserCreated): ...
+    """
+
+    def __init__(self, command_base: type | None, event_base: type | None):
+        ...
+
+
+        
+    def register(self):
+        ...

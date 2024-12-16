@@ -1,23 +1,10 @@
 import typing as ty
 
-from anywise import Anywise, GuardRegistry, handler_registry
-
-# from anywise.guard import MarkGuard
+from anywise import Anywise, GuardRegistry, make_registry
 from tests.conftest import CreateUser, UpdateUser, UserCommand
 
 guard_registry = GuardRegistry()
-user_registry = handler_registry(UserCommand)
-
-
-@user_registry
-async def handler_create(create_user: CreateUser, context: dict[str, ty.Any]):
-    assert context["processed_by"]
-    return "done"
-
-
-@user_registry
-async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
-    return "done"
+user_registry = make_registry(command_base=UserCommand)
 
 
 @guard_registry.pre_handle
@@ -38,10 +25,23 @@ async def timer(command: CreateUser, context: dict[str, ty.Any]) -> None:
         context["processed_by"].append("2")
 
 
+@user_registry
+async def handler_create(create_user: CreateUser, context: dict[str, ty.Any]):
+    assert context["processed_by"] == ["1", "2"]
+    return "created"
+
+
+@user_registry
+async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
+    assert context["processed_by"]
+    return "updated"
+
+
 @guard_registry.post_handle
 async def post(
     create_user: CreateUser, context: dict[str, ty.Any], response: str
 ) -> str:
+    assert response in ("created", "updated")
     return response
 
 

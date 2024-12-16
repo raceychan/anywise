@@ -6,11 +6,10 @@ from typing import Any, Callable, Sequence, cast
 
 from ididi import DependencyGraph
 
-from ._itypes import CallableMeta, IGuard
+from ._itypes import CommandContext, EventContext, FuncMeta, IGuard
 from ._registry import GuardRegistry, HandlerRegistry, ListenerRegistry, MethodMeta
 
-type CommandContext = dict[str, Any]
-type EventContext = MappingProxyType[str, Any]
+type AnyHandler[CTX] = "HandlerBase[Callable[[Any], Any] | Callable[[Any, CTX], Any]]"
 
 
 class HandlerBase[HandlerType]:
@@ -27,11 +26,17 @@ class HandlerBase[HandlerType]:
         self._is_solved = False
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self._handler})"
+        handler_repr = (
+            f"{self._owner_type}: {self._handler}"
+            if self._owner_type
+            else {self._handler}
+        )
+        return f"{self.__class__.__name__}({handler_repr})"
 
-
+    async def __call__(self, message: Any, context: Any) -> Any: ...
 class Handler(HandlerBase[Callable[[Any], Any]]):
-    async def __call__(self, message: Any) -> Any:
+    async def __call__(self, message: Any, _: Any = None) -> Any:
+        "For compatibility with ContextedHandler, we use `_` to receive context"
         if self._is_solved:
             return await self._handler(message)
         if self._owner_type:
@@ -52,7 +57,7 @@ class ContextedHandler[Ctx](HandlerBase[Callable[[Any, Ctx], Any]]):
         return await self._handler(message, context)
 
 
-def create_handler(anywise: "Anywise", meta: "CallableMeta[Any]"):
+def create_handler(anywise: "Anywise", meta: "FuncMeta[Any]"):
     raw_handler = meta.handler
     if not meta.is_async:
         raw_handler = partial(to_thread, cast(Any, raw_handler))
@@ -79,7 +84,10 @@ def create_handler(anywise: "Anywise", meta: "CallableMeta[Any]"):
 
 
 class Sender:
-    _handlers: dict[type, ContextedHandler[CommandContext] | Handler | IGuard]
+    _handlers: dict[
+        type,
+        AnyHandler[CommandContext] | IGuard,
+    ]
 
     def __init__(self, anywise: "Anywise"):
         self._anywise = anywise
@@ -90,7 +98,7 @@ class Sender:
             handler = create_handler(self._anywise, handler_meta)
             self._handlers[msg_type] = handler
 
-    async def send(self, msg: Any, context: dict[str, Any]) -> Any:
+    async def send(self, msg: Any, context: CommandContext) -> Any:
         worker = self._handlers[type(msg)]
         if isinstance(worker, Handler):
             return await worker(msg)
@@ -98,19 +106,18 @@ class Sender:
             return await worker(msg, context)
 
     def include_guards(self, guard_registry: GuardRegistry):
+        # TODO: improve logic
         for guard_target, guards in guard_registry:
-            handlers: list[
-                tuple[type, ContextedHandler[CommandContext] | Handler | IGuard]
-            ] = []
+            mapping: list[tuple[type, AnyHandler[CommandContext] | IGuard]] = []
 
             for command_type, handler in self._handlers.items():
                 if guard_target in command_type.__mro__:
-                    handlers.append((command_type, handler))
+                    mapping.append((command_type, handler))
 
-            if not handlers:
+            if not mapping:
                 continue
 
-            for handler_cmd, handler in handlers:
+            for handler_cmd, handler in mapping:
                 base = handler
                 for guard in reversed(guards):
                     guard.chain_next(base)
@@ -119,7 +126,7 @@ class Sender:
 
 
 class Publisher:
-    _subscribers: defaultdict[type, list[Handler | ContextedHandler[EventContext]]]
+    _subscribers: defaultdict[type, list[AnyHandler[EventContext]]]
 
     def __init__(self, anywise: "Anywise"):
         self._anywise = anywise
@@ -136,10 +143,10 @@ class Publisher:
         subscribers = self._subscribers[type(msg)]
 
         for handler in subscribers:
-            if isinstance(handler, ContextedHandler):
-                await handler(msg, context)
-            else:
+            if isinstance(handler, Handler):
                 await handler(msg)
+            else:
+                await handler(msg, context)
 
 
 class Anywise:
@@ -161,18 +168,19 @@ class Anywise:
             HandlerRegistry[Any] | GuardRegistry | ListenerRegistry[Any]
         ],
     ):
-        guard_registries: list[GuardRegistry] = []
+        guard_registries: list[GuardRegistry] = [
+            r for r in registries if isinstance(r, GuardRegistry)
+        ]
 
         for registry in registries:
             self._dg.merge(registry.graph)
             if isinstance(registry, HandlerRegistry):
                 self._sender.include(registry)
-            elif isinstance(registry, GuardRegistry):
-                guard_registries.append(registry)
-            else:
+            elif isinstance(registry, ListenerRegistry):
                 self._publisher.include(registry)
 
         for guard_registry in guard_registries:
+            # should include guard after handler registry
             self._sender.include_guards(guard_registry)
 
         self._dg.static_resolve_all()
@@ -188,3 +196,6 @@ class Anywise:
     async def publish(self, msg: Any, context: EventContext | None = None) -> None:
         context = context or MappingProxyType[str, Any]({})
         await self._publisher.publish(msg, context)
+
+    def decode(self, *args, **kwargs):
+        return self

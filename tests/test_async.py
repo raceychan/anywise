@@ -1,11 +1,10 @@
 import pytest
 
-from anywise import (
+from anywise import (  # handler_registry,; listener_registry,
     Anywise,
     ConcurrentPublisher,
-    handler_registry,
     inject,
-    listener_registry,
+    make_registry,
 )
 from tests.conftest import (
     CreateUser,
@@ -17,8 +16,12 @@ from tests.conftest import (
     UserNameUpdated,
 )
 
-user_cmd_handler = handler_registry(UserCommand)
-user_event_handler = listener_registry(UserEvent)
+user_cmd_handler = make_registry(command_base=UserCommand)
+user_event_handler = make_registry(event_base=UserEvent)
+
+"""
+make_registry(base_command = UserCommand)
+"""
 
 
 @user_cmd_handler

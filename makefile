@@ -1,11 +1,13 @@
 .PHONY: test
 
 test:
-	pixi run -e test pytest tests/
+	uv run pytest tests/
 
 feat:
-	pixi run -e test pytest tests/test_feat.py
+	uv urn pytest tests/test_feat.py
 
+dev:
+	uv run python -m anywise.demo.todo
 
 .PHONY: release
 

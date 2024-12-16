@@ -57,13 +57,13 @@ async def get_current_user(aut_repo: AuthRepo, jwt_token: str) -> User:
 class Guard:
     def __init__(
         self,
-        guard: GuardFunc | None = None,
+        next_guard: GuardFunc | None = None,
         /,
         *,
         pre_handle: GuardFunc | None = None,
-        post_handle: PostHandle | None = None,
+        post_handle: PostHandle[Any] | None = None,
     ):
-        self.guard = guard
+        self.next_guard = next_guard
         self.pre_handle = pre_handle
         self.post_handle = post_handle
 
@@ -73,6 +73,7 @@ class Guard:
             base += f"pre_handle={self.pre_handle}"
         if self.post_handle:
             base += f"post_handle={self.post_handle}"
+        base += ")"
         return base
 
     async def __call__(self, message: Any, context: dict[str, Any]) -> Any:
@@ -80,16 +81,34 @@ class Guard:
         if self.pre_handle:
             await self.pre_handle(message, context)
 
-        if self.guard:
-            response = await self.guard(message, context)
+        if self.next_guard:
+            response = await self.next_guard(message, context)
             if self.post_handle:
                 return await self.post_handle(message, context, response)
             return response
 
-    def chain_next(self, guard: GuardFunc) -> None:
-        self.guard = guard
+        raise Exception(f"no handler after {self}")
 
-    def bind(self, command: type | list[type]) -> None:
+    def chain_next(self, guard: GuardFunc) -> None:
+        self.next_guard = guard
+
+    # def bind(self, command: type | list[type]) -> None:
+    #     """
+    #     bind commands to current guard
+
+    #     self._guard_for: list[type] = []
+    #     """
+
+
+class BaseGuard:
+    def __init__(self, next_guard: GuardFunc):
+        self.next_guard = next_guard
+
+    def chain_next(self, guard: GuardFunc) -> None:
+        self.next_guard = guard
+
+    async def __call__(self, message: Any, context: dict[str, Any]) -> Any:
         """
-        bind commands to current guard
+        response = await self.next_guard
+        return response
         """

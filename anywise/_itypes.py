@@ -1,33 +1,33 @@
 from dataclasses import dataclass
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Literal,
-    MutableMapping,
-    Protocol,
-    TypeGuard,
-)
+from types import MappingProxyType
+from typing import Any, Awaitable, Callable, Literal, Protocol, TypeGuard
 
-type HandlerMapping[Command] = dict[type[Command], "CallableMeta[Command]"]
-type ListenerMapping[E] = dict[type[E], list[CallableMeta[E]]]
+type HandlerMapping[Command] = dict[type[Command], "FuncMeta[Command]"]
+type ListenerMapping[E] = dict[type[E], list[FuncMeta[E]]]
 
-type GuardFunc = Callable[[Any, dict[str, Any]], Awaitable[Any]]
-type PostHandle = Callable[[Any, dict[str, Any], Any], Awaitable[Any]]
-type GuardContext = MutableMapping[str, Any]
+type GuardContext = dict[str, Any]
+type GuardFunc = Callable[[Any, GuardContext], Awaitable[Any]]
+type PostHandle[R] = Callable[[Any, GuardContext, R], Awaitable[R]]
+type CommandContext = dict[str, Any]
+type EventContext = MappingProxyType[str, Any]
 
 
 class IGuard(Protocol):
-    pre_handle: GuardFunc | None
-    post_handle: PostHandle | None
+    next_guard: GuardFunc | None
+    # def bind(self, command: type | list[type]) -> None: ...
 
     def chain_next(self, guard: GuardFunc) -> None: ...
-    def bind(self, command: type | list[type]) -> None: ...
-    async def __call__(self, message: Any, context: dict[str, Any]) -> Any: ...
+    async def __call__(self, message: Any, context: GuardContext) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class CallableMeta[Message]:
+class FuncMeta[Message]:
+    """
+    is_async: bool
+    is_contexted:
+    whether the handler receives a context param
+    """
+
     message_type: type[Message]
     handler: Callable[..., Any]
     is_async: bool
@@ -35,16 +35,7 @@ class CallableMeta[Message]:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class FuncMeta[Message](CallableMeta[Message]):
-    """
-    is_async: bool
-    is_contexted:
-    whether to pass a context object to handler
-    """
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class MethodMeta[Message](CallableMeta[Message]):
+class MethodMeta[Message](FuncMeta[Message]):
     owner_type: type
 
 
