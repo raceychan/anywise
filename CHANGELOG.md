@@ -50,3 +50,8 @@ Configure pyright:
 
 `stubPath [path, optional]`
 Path to a directory that contains custom type stubs. Each package's type stub file(s) are expected to be in its own subdirectory. The default value of this setting is "./typings". (typingsPath is now deprecated)
+
+bugs
+
+1. dependency graph look up scope, but not found
+2. dependency graph merge lost information about factory

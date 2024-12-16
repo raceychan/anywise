@@ -126,18 +126,10 @@ class ListenerRegistry[Event](RegistryBase[Event]):
                 if isinstance(meta, MethodMeta):
                     self._graph.node(ignore=msg_type)(meta.owner_type)
                 else:
-                    listener = meta.handler
-
-                    if meta.is_contexted:
-                        ignore = (msg_type, "context")
-                    else:
-                        ignore = msg_type
-
-                    entry = self._graph.entry(ignore=ignore)(listener)
                     metas[i] = FuncMeta(
                         message_type=msg_type,
-                        handler=entry,
-                        is_async=inspect.iscoroutinefunction(listener),
+                        handler=meta.handler,
+                        is_async=meta.is_async,
                         is_contexted=meta.is_contexted,
                     )
             self._mapping[msg_type].extend(metas)
@@ -161,15 +153,13 @@ class HandlerRegistry[Command](RegistryBase[Command]):
     def register(self, handler: Target):
         mappings = collect_handlers(self._message_type, handler)
         for msg_type, meta in mappings.items():
-            f = meta.handler
             if isinstance(meta, MethodMeta):
                 self._graph.node(ignore=msg_type)(meta.owner_type)
             else:
-                entry = self._graph.entry(ignore=msg_type)(f)
                 mappings[msg_type] = FuncMeta(
                     message_type=msg_type,
-                    handler=entry,
-                    is_async=inspect.iscoroutinefunction(f),
+                    handler=meta.handler,
+                    is_async=meta.is_async,
                     is_contexted=meta.is_contexted,
                 )
         self._mapping.update(mappings)
@@ -247,25 +237,12 @@ class GuardRegistry:
         self._guards[message_type].append(guard)
 
 
-class RegistryFacade:
-    """
-    TODO: make a registry facade
-    register handler based on their message type
-
-    user_handler_registry = make_registry(base_command=UserCommand, base_event=UserEvent)
-
-
-    @user_handler_registry
-    async def singup(command: CreateUser): ...
-
-    @user_handler_registry
-    async def notify_user(event: UserCreated): ...
-    """
+class MessageRegistry:
 
     def __init__(self, command_base: type | None, event_base: type | None):
-        ...
+        self._command_base = command_base
+        self._event_base = event_base
 
+        self._message_guards: defaultdict[type, list[IGuard]] = defaultdict(list)
 
-        
-    def register(self):
-        ...
+    def register(self): ...

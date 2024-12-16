@@ -8,6 +8,7 @@ from ididi import DependencyGraph
 
 from ._itypes import CommandContext, EventContext, FuncMeta, IGuard
 from ._registry import GuardRegistry, HandlerRegistry, ListenerRegistry, MethodMeta
+from .errors import UnregisteredMessageError
 
 type AnyHandler[CTX] = "HandlerBase[Callable[[Any], Any] | Callable[[Any, CTX], Any]]"
 
@@ -21,6 +22,7 @@ class HandlerBase[HandlerType]:
         owner_type: type | None,
     ):
         self._anywise = anywise
+
         self._handler: HandlerType = handler
         self._owner_type = owner_type
         self._is_solved = False
@@ -66,6 +68,8 @@ def create_handler(anywise: "Anywise", meta: "FuncMeta[Any]"):
         owner_type = meta.owner_type
     else:
         owner_type = None
+        ignore = ignore = (meta.message_type, "context")
+        raw_handler = anywise._dg.entry(ignore=ignore)(raw_handler)
 
     handler = (
         ContextedHandler(
@@ -99,7 +103,11 @@ class Sender:
             self._handlers[msg_type] = handler
 
     async def send(self, msg: Any, context: CommandContext) -> Any:
-        worker = self._handlers[type(msg)]
+        try:
+            worker = self._handlers[type(msg)]
+        except KeyError:
+            raise UnregisteredMessageError(msg)
+
         if isinstance(worker, Handler):
             return await worker(msg)
         else:
@@ -191,11 +199,9 @@ class Anywise:
     async def send(self, msg: Any, context: CommandContext | None = None) -> Any:
         # TODO: iter through handlers of _sender, generate type stub file.
         context = context or {}
-        return await self._sender.send(msg, context)
+        res = await self._sender.send(msg, context)
+        return res
 
     async def publish(self, msg: Any, context: EventContext | None = None) -> None:
         context = context or MappingProxyType[str, Any]({})
         await self._publisher.publish(msg, context)
-
-    def decode(self, *args, **kwargs):
-        return self

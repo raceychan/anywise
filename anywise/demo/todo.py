@@ -1,32 +1,66 @@
 import typing as ty
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.sql import insert
 
-from ..anywise import Anywise
+from ..anywise import Anywise, HandlerRegistry
+from .db import Todos
+from .model import CreateTodo, TodoCommand
+
+registry = HandlerRegistry(TodoCommand)
 
 
+@registry.factory
 def engine_factory() -> AsyncEngine:
-    url = "sqlite://"
+    url = "sqlite+aiosqlite://"
     return create_async_engine(url)
 
 
-def get_anywise(r: Request) -> Anywise:
-    return r.state.anywise
+@registry
+async def create_todo(
+    command: CreateTodo,
+    context: dict[str, ty.Any],
+    engine: AsyncEngine,
+    anywise: Anywise,
+):
+    # BUG, a new anywise is created in sender
+    new_engine = await anywise.resolve(AsyncEngine)
+
+    stmt = insert(Todos).values(
+        id=str(uuid4()), title=command.title, content=command.content
+    )
+    async with engine.begin() as cursor:
+        res = await cursor.execute(stmt)
+
+    return res.fetchone()
 
 
-AnyWise = ty.Annotated[Anywise, Depends(get_anywise)]
+# @registry
+# class TodoService:
+#     def __init__(self, engine: AsyncEngine, anywise: Anywise):
+#         self._engine = engine
+#         self._anywise = anywise
+
+#     async def create_todo(
+#         self,
+#         command: CreateTodo,
+#         context: dict[str, ty.Any],
+#     ):
+#         # BUG, a new anywise is created in sender
+#         new_engine = await self._anywise.resolve(AsyncEngine)
+
+#         stmt = insert(Todos).values(
+#             id=str(uuid4()), title=command.title, content=command.content
+#         )
+#         async with self._engine.begin() as cursor:
+#             res = await cursor.execute(stmt)
+
+#         return res.fetchone()
 
 
-class TodoCommand: ...
+"""
+bug with entry: does not reuse solved dependency
 
-
-class CreateTodo(TodoCommand): ...
-
-
-todo_router = APIRouter(prefix="/todos")
-
-
-@todo_router.get("/")
-async def read_todos(anywise: AnyWise):
-    return "hello, world"
+probably has something todo with use_scope
+"""
