@@ -15,8 +15,8 @@ VERSION ?= x.x.x
 BRANCH = version/$(VERSION)
 
 # Command definitions
-PIXI_CMD = pixi run -e publish
-HATCH_VERSION_CMD = $(PIXI_CMD) hatch version
+UV_CMD = uv run
+HATCH_VERSION_CMD = $(UV_CMD) hatch version
 CURRENT_VERSION = $(shell $(HATCH_VERSION_CMD))
 
 # Helper functions
