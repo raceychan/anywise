@@ -15,9 +15,11 @@ FastWise = Annotated[Anywise, Depends(get_anywise)]
 
 
 class FastAPISourceConfig(TypedDict):
-    method: Literal["GET", "POST", "PATCH", "DELETE"]
-    return_type: type
-    response_class: type
+    path: str
+    http_method: Literal["GET", "POST", "PATCH", "DELETE"]
+
+    # return_type: type
+    # response_class: type
 
 
 class FastAPICommand(Protocol):
@@ -30,7 +32,7 @@ class UserCommand: ...
 
 @dataclass
 class CreateUser(UserCommand):
-    __command_meta__ = FastAPIConfig(path="/users", http_method="POST")
+    __source_config__ = FastAPISourceConfig(path="/users", http_method="POST")
 
     """
     converts this to 
@@ -46,7 +48,9 @@ class CreateUser(UserCommand):
 class UpdateUser(UserCommand):
     entity_id: str  # Field(alias="user_id")
 
-    __command_meta__ = FastAPIConfig(path="/users/{entity_id}", http_method="PATCH")
+    __source_config__ = FastAPISourceConfig(
+        path="/users/{entity_id}", http_method="PATCH"
+    )
     """
     converts this to 
     router = APIRouter()
@@ -60,7 +64,12 @@ class UpdateUser(UserCommand):
 def autoroute(message: FastAPICommand):
     """
     generate routes from registry
+
+    app = FastAPI()
+    app.include_router(autoroute(UserCommand))
+    app.include_router(autoroute(InventoryCommand))
     """
+
     try:
         config = message.__source_config__
     except AttributeError:

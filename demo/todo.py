@@ -4,7 +4,8 @@ import typing as ty
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 from sqlalchemy.sql import insert, select
 
-from ..anywise import Anywise, MessageRegistry
+from anywise import Anywise, MessageRegistry
+
 from .db import Events, Todos
 from .model import CreateTodo, ListTodos, TodoCommand, TodoCreated, TodoEvent
 
@@ -13,7 +14,7 @@ registry = MessageRegistry(command_base=TodoCommand, event_base=TodoEvent)
 
 @registry.factory
 def engine_factory() -> AsyncEngine:
-    url = "sqlite+aiosqlite:///anywise/demo/db.db"
+    url = "sqlite+aiosqlite:///demo/db.db"
     return create_async_engine(url)
 
 
@@ -61,23 +62,3 @@ async def listen_todo_created(
         version=1,
     )
     await conn.execute(stmt)
-
-
-# @registry
-# class TodoService:
-#     def __init__(self, engine: AsyncEngine, anywise: Anywise):
-#         self._engine = engine
-#         self._anywise = anywise
-
-#     async def create_todo(
-#         self,
-#         command: CreateTodo,
-#         context: dict[str, ty.Any],
-#     ):
-#         stmt = insert(Todos).values(
-#             id=str(uuid4()), title=command.title, content=command.content
-#         )
-#         async with self._engine.begin() as cursor:
-#             res = await cursor.execute(stmt)
-
-#         return res.fetchone()

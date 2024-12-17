@@ -37,10 +37,9 @@ class CreateUser(UserCommand): ...
 class UserEvent: ...
 class UserCreated(UserEvent): ...
 
-userhandler = handler_registry(UserCommand)
-userlistener = listener_registry(UserEvent)
+registry = MessageRegistry(command_base=UserCommand, event_base= UserEvent)
 
-@userhandler
+@registry
 async def create_user(
      command: CreateUser, 
      anywise: Anywise, 
@@ -49,7 +48,7 @@ async def create_user(
      await service.create_user(command.username, command.user_email)
      await anywise.publish(UserCreated(command.username, command.user_email))
 
-@userlistener
+@registry
 async def notify_user(event: UserCreated, service: EmailSender):
      await service.send_greeting(command.user_email)
 
@@ -64,14 +63,14 @@ async def main():
 
 ## Tutorial
 
-### register handler with HandlerRegistry
+### register command handler / event listeners with MessageRegistry
 
 ```py
-userhandler = handler_registry(UserCommand)
-userhanlder(hanlder_func)
+registry = MessageRegistry(UserCommand)
+registry(hanlder_func)
 ```
 
-use HandlerRegistry to decorate / register a function or a class as handlers of a command.
+use MessageRegistry to decorate / register a function or a class as handlers of a command.
 
 when a function is registered, anywise will can through its signature, if any param is annotated as a subclass of the base command type, it will be registered as a handler of the command.
 
@@ -82,8 +81,7 @@ when a class is registered, anywise will scan through its pulic methods, then re
 ```py
 from anywise import AnyWise, GuardRegistry, handler_registry
 
-guard_registry = GuardRegistry()
-user_registry = handler_registry(UserCommand)
+user_registry = MessageRegistry(command_base=UserCommand)
 
 
 @user_registry
@@ -97,7 +95,7 @@ async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
     return "done"
 
 
-@guard_registry.pre_handle
+@user_registry.pre_handle
 async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
     if not context.get("processed_by"):
         context["processed_by"] = ["1"]

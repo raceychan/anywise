@@ -3,8 +3,9 @@ import typing as ty
 from fastapi import APIRouter, FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from .. import Anywise
-from ..integration.fastapi import FastWise
+from anywise import Anywise
+from anywise.integration.fastapi import FastWise
+
 from .db import create_tables
 from .model import CreateTodo, ListTodos
 from .todo import registry
@@ -33,9 +34,8 @@ async def lifespan(app: FastAPI) -> ty.AsyncGenerator[AppState, None]:
     async with anywise.scope("app") as app_scope:
         app_scope.register_dependent(anywise, Anywise)
         engine = await app_scope.resolve(AsyncEngine)
-
-    await create_tables(engine)
-    yield {"anywise": anywise}
+        await create_tables(engine)
+        yield {"anywise": anywise}
 
 
 def app_factory():
