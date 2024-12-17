@@ -49,3 +49,5 @@ async def test_guard():
     aw.include([user_registry])
     await aw.send(CreateUser("1", "2"))
     await aw.send(UpdateUser("1", "2", "3"))
+
+

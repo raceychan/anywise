@@ -1,6 +1,6 @@
 from asyncio import to_thread
 from collections import defaultdict
-from functools import partial
+from functools import lru_cache, partial
 from types import MappingProxyType, MethodType
 from typing import Any, Callable, Sequence, cast
 
@@ -93,10 +93,7 @@ def create_handler(anywise: "Anywise", meta: "FuncMeta[Any]"):
 
 
 class Sender:
-    _handlers: dict[
-        type,
-        AnyHandler[CommandContext] | IGuard,
-    ]
+    _handlers: dict[type, AnyHandler[CommandContext] | IGuard]
 
     def __init__(self, anywise: "Anywise"):
         self._anywise = anywise
@@ -108,43 +105,42 @@ class Sender:
             handler = create_handler(self._anywise, handler_meta)
             self._handlers[msg_type] = handler
 
+    @lru_cache(maxsize=1024)
+    def get_handler(self, msg_type: Any):
+        handler = self._handlers[msg_type]
+
+        guards: list[IGuard] = []
+        for base in reversed(msg_type.__mro__):
+            guards.extend(self._guards[base])
+
+        if not guards:
+            return handler
+
+        for i in range(len(guards) - 1):
+            guards[i].next_guard = guards[i + 1]
+        guards[-1].next_guard = handler
+
+        return guards[0]
+
     async def send(self, msg: Any, context: CommandContext) -> Any:
         try:
-            worker = self._handlers[type(msg)]
+            handler = self.get_handler(type(msg))
         except KeyError:
             raise UnregisteredMessageError(msg)
 
-        if isinstance(worker, Handler):
-            return await worker(msg)
+        if isinstance(handler, Handler):
+            return await handler(msg)
         else:
-            return await worker(msg, context)
+            return await handler(msg, context)
 
     def include_guards(self, message_guards: defaultdict[type, list[IGuard]]):
         """
-        TODO: currently implementation has bug with include guards
-        if user call include twice
-        include guards will not work properly
-
-        we should probably separate guards and handlers
-        only combine them at runtime
+        we need to re-order message_guards
+        we might create a guard-chain ds to manage this
+        where add guard where insert guard before handler
         """
-        # TODO: improve logic
-        for guard_target, guards in message_guards.items():
-            mapping: list[tuple[type, AnyHandler[CommandContext] | IGuard]] = []
-
-            for command_type, handler in self._handlers.items():
-                if guard_target in command_type.__mro__:
-                    mapping.append((command_type, handler))
-
-            if not mapping:
-                continue
-
-            for handler_cmd, handler in mapping:
-                base = handler
-                for guard in reversed(guards):
-                    guard.chain_next(base)
-                    base = guard
-                self._handlers[handler_cmd] = base
+        for target, guards in message_guards.items():
+            self._guards[target].extend(guards)
 
 
 class Publisher:
@@ -188,21 +184,11 @@ class Anywise:
         self,
         registries: Sequence[MessageRegistry],
     ):
-
-        message_guards: GuardMapping[Any] = defaultdict(list)
-
         for msg_registry in registries:
             self._dg.merge(msg_registry.graph)
             self._sender.include(msg_registry.command_mapping)
             self._publisher.include(msg_registry.event_mapping)
-
-            for cmd_type, guards in msg_registry.message_guards.items():
-                if cmd_type not in message_guards:
-                    message_guards[cmd_type] = guards
-                else:
-                    message_guards[cmd_type].extend(guards)
-
-        self._sender.include_guards(message_guards)
+            self._sender.include_guards(msg_registry.message_guards)
 
         self._dg.static_resolve_all()
 
