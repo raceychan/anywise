@@ -28,6 +28,16 @@ class Todos(TableBase):
     content = sa.Column("content", sa.String, unique=False, index=False)
 
 
+class Events(TableBase):
+    __tablename__: str = "events"
+    id = sa.Column("id", sa.String, primary_key=True)
+    event_type = sa.Column("event_type", sa.String, index=True)
+    event_body = sa.Column("event_body", sa.JSON)
+    entity_id = sa.Column("entity_id", sa.String, index=True)
+    version = sa.Column("version", sa.String, index=True)
+    # consumed_at: sa.DateTime, nullable=True
+
+
 async def create_tables(engine: saio.AsyncEngine):
     async with engine.begin() as conn:
         await conn.run_sync(TableBase.metadata.create_all)

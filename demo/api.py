@@ -1,25 +1,25 @@
 import typing as ty
 
-import uvicorn
 from fastapi import APIRouter, FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .. import Anywise
 from ..integration.fastapi import FastWise
 from .db import create_tables
-from .model import CreateTodo
+from .model import CreateTodo, ListTodos
 from .todo import registry
 
 todo_router = APIRouter(prefix="/todos")
 
 
 @todo_router.get("/")
-async def read_todos():
-    return "hello, world"
+async def read_todos(anywise: FastWise) -> list[dict[str, ty.Any]]:
+    res = await anywise.send(ListTodos())
+    return res
 
 
 @todo_router.post("/")
-async def _(command: CreateTodo, anywise: FastWise):
+async def _(command: CreateTodo, anywise: FastWise) -> str:
     return await anywise.send(command)
 
 
@@ -44,8 +44,3 @@ def app_factory():
     app = FastAPI(lifespan=lifespan, version=VERSION, root_path=root_path)
     app.include_router(todo_router)
     return app
-
-
-if __name__ == "__main__":
-    app_str = "anywise.demo.app:app_factory"
-    uvicorn.run(app_str, reload=True)

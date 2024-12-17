@@ -7,7 +7,7 @@ feat:
 	uv urn pytest tests/test_feat.py
 
 dev:
-	uv run python -m anywise.demo.app
+	uv run python -m anywise.demo
 
 .PHONY: release
 

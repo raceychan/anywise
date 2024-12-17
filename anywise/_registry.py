@@ -6,7 +6,14 @@ from typing import Any, Callable, Sequence, Union, get_args, get_origin, overloa
 
 from ididi import DependencyGraph, INode
 
-from ._itypes import FuncMeta, GuardMapping, HandlerMapping, ListenerMapping, MethodMeta
+from ._itypes import (
+    FuncMeta,
+    GuardMapping,
+    HandlerMapping,
+    IGuard,
+    ListenerMapping,
+    MethodMeta,
+)
 from ._visitor import Target, collect_handlers, collect_listeners
 from .errors import MessageHandlerNotFoundError
 from .guard import Guard, GuardFunc, PostHandle
@@ -20,33 +27,29 @@ from .guard import Guard, GuardFunc, PostHandle
 #     """
 
 
-class GuardRegistry:
-    """
-    register guard into guard registry
-    when included in anywise, match handler by command type
-    a guard of base command will be added to all handlers of subcommand, meaning
-
-    guard(UserCommand)
-
-    will be added to handle of CreateUser, UpdateUser, etc.
-
-
-    class AuthService:
-        @guard(UserCommand)
-        def validate_user(self, command: UserCommand, context: AuthContext):
-            user = self._get_user(context.token.sub)
-            if user.user_id != command.user_id:
-                raise ValidationError
-            context["user"] = user
-
-    @guard.pre_handle
-    def log_request(command, message): ...
-    """
-
-
 class MessageRegistry:
+    @overload
+    def __init__(
+        self, *, command_base: type[Any], graph: DependencyGraph | None = None
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self, *, event_base: type[Any], graph: DependencyGraph | None = None
+    ) -> None: ...
+
+    @overload
     def __init__(
         self,
+        *,
+        command_base: type[Any],
+        event_base: type[Any],
+        graph: DependencyGraph | None = None,
+    ) -> None: ...
+
+    def __init__(
+        self,
+        *,
         command_base: type[Any] | None = None,
         event_base: type[Any] | None = None,
         graph: DependencyGraph | None = None,
@@ -184,3 +187,10 @@ class MessageRegistry:
         for cmdtype in self.extract_gurad_target(func):
             self.message_guards[cmdtype].append(Guard(post_handle=func))
         return func
+
+    def add_guard(self, targets: type | Sequence[type], guard: IGuard):
+        if not isinstance(targets, Sequence):
+            targets = [targets]
+
+        for target in targets:
+            self.message_guards[target].append(guard)

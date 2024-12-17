@@ -105,8 +105,8 @@ class Sender:
             handler = create_handler(self._anywise, handler_meta)
             self._handlers[msg_type] = handler
 
-    @lru_cache(maxsize=1024)
-    def get_handler(self, msg_type: Any):
+    @lru_cache(maxsize=None)
+    def _get_handler(self, msg_type: Any):
         handler = self._handlers[msg_type]
 
         guards: list[IGuard] = []
@@ -122,12 +122,13 @@ class Sender:
 
         return guards[0]
 
-    async def send(self, msg: Any, context: CommandContext) -> Any:
+    async def send(self, msg: object, context: CommandContext) -> Any:
         try:
-            handler = self.get_handler(type(msg))
+            handler = self._get_handler(type(msg))
         except KeyError:
             raise UnregisteredMessageError(msg)
 
+        # async with self._anywise.scope(f"{msg}"):
         if isinstance(handler, Handler):
             return await handler(msg)
         else:
@@ -199,7 +200,7 @@ class Anywise:
         ignore = (message_type, "context")
         return self._dg.entry(ignore=ignore)(func)
 
-    def scope(self, name: str):
+    def scope(self, name: str | None = None):
         return self._dg.scope(name)
 
     async def send(self, msg: Any, context: CommandContext | None = None) -> Any:
