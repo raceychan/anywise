@@ -5,10 +5,7 @@ from ididi import inject as inject
 
 from ._itypes import GuardFunc as GuardFunc
 from ._itypes import IGuard as IGuard
-from ._registry import GuardRegistry as GuardRegistry
-from ._registry import handler_registry as handler_registry
-from ._registry import listener_registry as listener_registry
-from ._registry import make_registry as make_registry
+from ._registry import MessageRegistry as MessageRegistry
 from .anywise import Anywise as Anywise
 from .publisher import ConcurrentPublisher as ConcurrentPublisher
 

@@ -7,7 +7,13 @@ from typing import Any, Callable, Sequence, cast
 from ididi import DependencyGraph
 
 from ._itypes import CommandContext, EventContext, FuncMeta, IGuard
-from ._registry import GuardRegistry, HandlerRegistry, ListenerRegistry, MethodMeta
+from ._registry import (
+    GuardMapping,
+    HandlerMapping,
+    ListenerMapping,
+    MessageRegistry,
+    MethodMeta,
+)
 from .errors import UnregisteredMessageError
 
 type AnyHandler[CTX] = "HandlerBase[Callable[[Any], Any] | Callable[[Any, CTX], Any]]"
@@ -68,8 +74,7 @@ def create_handler(anywise: "Anywise", meta: "FuncMeta[Any]"):
         owner_type = meta.owner_type
     else:
         owner_type = None
-        ignore = ignore = (meta.message_type, "context")
-        raw_handler = anywise._dg.entry(ignore=ignore)(raw_handler)
+        raw_handler = anywise.entry(meta.message_type, raw_handler)
 
     handler = (
         ContextedHandler(
@@ -96,9 +101,10 @@ class Sender:
     def __init__(self, anywise: "Anywise"):
         self._anywise = anywise
         self._handlers = {}
+        self._guards: GuardMapping[Any] = defaultdict(list)
 
-    def include(self, registry: HandlerRegistry[Any]) -> None:
-        for msg_type, handler_meta in registry:
+    def include(self, mapping: HandlerMapping[Any]) -> None:
+        for msg_type, handler_meta in mapping.items():
             handler = create_handler(self._anywise, handler_meta)
             self._handlers[msg_type] = handler
 
@@ -113,9 +119,17 @@ class Sender:
         else:
             return await worker(msg, context)
 
-    def include_guards(self, guard_registry: GuardRegistry):
+    def include_guards(self, message_guards: defaultdict[type, list[IGuard]]):
+        """
+        TODO: currently implementation has bug with include guards
+        if user call include twice
+        include guards will not work properly
+
+        we should probably separate guards and handlers
+        only combine them at runtime
+        """
         # TODO: improve logic
-        for guard_target, guards in guard_registry:
+        for guard_target, guards in message_guards.items():
             mapping: list[tuple[type, AnyHandler[CommandContext] | IGuard]] = []
 
             for command_type, handler in self._handlers.items():
@@ -140,8 +154,8 @@ class Publisher:
         self._anywise = anywise
         self._subscribers = defaultdict(list)
 
-    def include(self, registry: ListenerRegistry[Any]) -> None:
-        for msg_type, listener_metas in registry:
+    def include(self, mapping: ListenerMapping[Any]) -> None:
+        for msg_type, listener_metas in mapping.items():
             if msg_type not in self._subscribers:
                 self._subscribers[msg_type] = list()
             workers = [(create_handler(self._anywise, meta)) for meta in listener_metas]
@@ -172,29 +186,35 @@ class Anywise:
 
     def include(
         self,
-        registries: Sequence[
-            HandlerRegistry[Any] | GuardRegistry | ListenerRegistry[Any]
-        ],
+        registries: Sequence[MessageRegistry],
     ):
-        guard_registries: list[GuardRegistry] = [
-            r for r in registries if isinstance(r, GuardRegistry)
-        ]
 
-        for registry in registries:
-            self._dg.merge(registry.graph)
-            if isinstance(registry, HandlerRegistry):
-                self._sender.include(registry)
-            elif isinstance(registry, ListenerRegistry):
-                self._publisher.include(registry)
+        message_guards: GuardMapping[Any] = defaultdict(list)
 
-        for guard_registry in guard_registries:
-            # should include guard after handler registry
-            self._sender.include_guards(guard_registry)
+        for msg_registry in registries:
+            self._dg.merge(msg_registry.graph)
+            self._sender.include(msg_registry.command_mapping)
+            self._publisher.include(msg_registry.event_mapping)
+
+            for cmd_type, guards in msg_registry.message_guards.items():
+                if cmd_type not in message_guards:
+                    message_guards[cmd_type] = guards
+                else:
+                    message_guards[cmd_type].extend(guards)
+
+        self._sender.include_guards(message_guards)
 
         self._dg.static_resolve_all()
 
     async def resolve[T](self, dep_type: type[T]) -> T:
         return await self._dg.aresolve(dep_type)
+
+    def entry(self, message_type: type, func: Callable[..., Any]):
+        ignore = (message_type, "context")
+        return self._dg.entry(ignore=ignore)(func)
+
+    def scope(self, name: str):
+        return self._dg.scope(name)
 
     async def send(self, msg: Any, context: CommandContext | None = None) -> Any:
         # TODO: iter through handlers of _sender, generate type stub file.

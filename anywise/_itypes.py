@@ -1,9 +1,11 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Awaitable, Callable, Literal, Protocol, TypeGuard
 
 type HandlerMapping[Command] = dict[type[Command], "FuncMeta[Command]"]
-type ListenerMapping[E] = dict[type[E], list[FuncMeta[E]]]
+type ListenerMapping[Event] = dict[type[Event], list[FuncMeta[Event]]]
+type GuardMapping[Command] = defaultdict[type[Command], list[IGuard]]
 
 type GuardContext = dict[str, Any]
 type GuardFunc = Callable[[Any, GuardContext], Awaitable[Any]]

@@ -24,16 +24,15 @@ async def create_todo(
     engine: AsyncEngine,
     anywise: Anywise,
 ):
-    # BUG, a new anywise is created in sender
-    new_engine = await anywise.resolve(AsyncEngine)
+    todo_id = str(uuid4())
 
     stmt = insert(Todos).values(
-        id=str(uuid4()), title=command.title, content=command.content
+        id=todo_id, title=command.title, content=command.content
     )
     async with engine.begin() as cursor:
-        res = await cursor.execute(stmt)
+        await cursor.execute(stmt)
 
-    return res.fetchone()
+    return todo_id
 
 
 # @registry
@@ -57,10 +56,3 @@ async def create_todo(
 #             res = await cursor.execute(stmt)
 
 #         return res.fetchone()
-
-
-"""
-bug with entry: does not reuse solved dependency
-
-probably has something todo with use_scope
-"""

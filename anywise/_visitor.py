@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import Any, Callable
 
 from ._itypes import FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
-from .errors import MessageNotFoundError, NotSupportedHandlerTypeError
+from .errors import MessageHandlerNotFoundError, NotSupportedHandlerTypeError
 
 type Target = type | Callable[..., Any]
 
@@ -71,7 +71,8 @@ def _extract_from_function[
 
     if meta:
         return meta
-    raise MessageNotFoundError(
+
+    raise MessageHandlerNotFoundError(
         f"can't find param of type `{message_type}` in {handler} signature"
     )
 
@@ -86,7 +87,7 @@ def _extract_from_class[
             continue
         try:
             func_meta = _extract_from_function(base_msg_type, method)
-        except MessageNotFoundError:
+        except MessageHandlerNotFoundError:
             continue
         message_type = func_meta.message_type
         container = MethodMeta[Message](
@@ -99,18 +100,15 @@ def _extract_from_class[
         handlers.append(container)
 
     if not handlers:
-        raise MessageNotFoundError(f"{cls} does not have any handler")
+        raise MessageHandlerNotFoundError(
+            f"{cls} does not have any handler for {base_msg_type}"
+        )
     return handlers
 
 
 def collect_handlers[
     Message
 ](message_type: type[Message], target: Target) -> HandlerMapping[Message]:
-    """
-    TODO:
-    collect from module, package, project
-    if target is None, collect current module
-    """
     mapping: HandlerMapping[Message] = {}
 
     if inspect.isfunction(target):
@@ -131,10 +129,7 @@ def collect_listeners[
 ](message_type: type[Message], target: type | Callable[..., Any]) -> ListenerMapping[
     Message
 ]:
-    """
-    TODO: collect from module, package, project
-    if target is None, collect current module
-    """
+
     mapping: ListenerMapping[Message] = defaultdict(list)
     if inspect.isfunction(target):
         func_meta = _extract_from_function(message_type, target)
@@ -144,7 +139,7 @@ def collect_listeners[
         for meta in metas:
             mapping[meta.message_type].append(meta)
     else:
-        raise Exception("Handler Not Supported")
+        raise NotSupportedHandlerTypeError("Handler Not Supported")
     return mapping
 
 

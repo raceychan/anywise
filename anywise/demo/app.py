@@ -20,7 +20,6 @@ async def read_todos():
 
 @todo_router.post("/")
 async def _(command: CreateTodo, anywise: FastWise):
-    print(f"at router {anywise}")
     return await anywise.send(command)
 
 
@@ -31,10 +30,9 @@ class AppState(ty.TypedDict):
 async def lifespan(app: FastAPI) -> ty.AsyncGenerator[AppState, None]:
     anywise = Anywise()
     anywise.include([registry])
-    async with anywise._dg.scope("app") as app_scope:
+    async with anywise.scope("app") as app_scope:
         app_scope.register_dependent(anywise, Anywise)
         engine = await app_scope.resolve(AsyncEngine)
-        print(f"id {anywise}")
 
     await create_tables(engine)
     yield {"anywise": anywise}
