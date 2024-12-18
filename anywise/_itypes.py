@@ -19,8 +19,6 @@ class IGuard(Protocol):
     @property
     def next_guard(self) -> GuardFunc | None: ...
 
-    # def bind(self, command: type | list[type]) -> None: ...
-
     def chain_next(self, next_guard: GuardFunc, /) -> None:
         """
         self._next_guard = next_guard

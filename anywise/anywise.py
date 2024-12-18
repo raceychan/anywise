@@ -2,7 +2,7 @@ from asyncio import to_thread
 from collections import defaultdict
 from functools import lru_cache, partial
 from types import MappingProxyType, MethodType
-from typing import Any, Callable, Mapping, Sequence, cast
+from typing import Any, Awaitable, Callable, cast
 
 from ididi import DependencyGraph
 
@@ -17,6 +17,24 @@ from ._registry import (
 from .errors import UnregisteredMessageError
 
 type AnyHandler[CTX] = "HandlerBase[Callable[[Any], Any] | Callable[[Any, CTX], Any]]"
+type EventListeners = list[AnyHandler[EventContext]]
+type CommandHandler = AnyHandler[CommandContext] | IGuard
+type SendStrategy = Callable[[Any, CommandContext, CommandHandler], Any]
+type PublishStrategy = Callable[[Any, EventContext, EventListeners], Awaitable[None]]
+
+
+async def default_send(
+    message: Any, context: CommandContext, handler: AnyHandler[CommandContext] | IGuard
+) -> Any:
+    return await handler(message, context)
+
+
+async def default_publish(
+    message: Any, context: EventContext, listeners: list[AnyHandler[EventContext]]
+) -> Any:
+
+    for listener in listeners:
+        await listener(message, context)
 
 
 class HandlerBase[HandlerType]:
@@ -64,18 +82,48 @@ class ContextedHandler[Ctx](HandlerBase[Callable[[Any, Ctx], Any]]):
         self._is_solved = True
         return await self._handler(message, context)
 
+    def update_handler(self, solved_obj: Any):
+        """
+        if handler._owner_type and not handler._solved:
+            ...
+        """
+        self._handler = MethodType(self._handler, solved_obj)
+        self._is_solved = True
 
-class Sender:
-    _handlers: dict[type, AnyHandler[CommandContext] | IGuard]
 
-    def __init__(self):
-        self._handlers = {}
+class Anywise:
+    """
+    send_strategy: SendingStrategy
+    def _(msg: object, context: CommandContext, handler): ...
+
+    publish_strategy: PublishingStrategy
+    def _(msg: object, context: CommandContext, listeners): ...
+
+    """
+
+    def __init__(
+        self,
+        *,
+        dg: DependencyGraph | None = None,
+        sender: SendStrategy | None = None,
+        publisher: PublishStrategy | None = None,
+    ):
+        self._dg = dg or DependencyGraph()
+        self._sender: SendStrategy = sender or default_send
+        self._publisher: PublishStrategy = publisher or default_publish
+        self._dg.register_dependent(self, self.__class__)
+
+        """
+        # TODO: don't let handlers depend on anywise
+        self._resolved_hanlders: dict[type, Handler / ContextedHandler] = {}
+        """
+
+        self._handlers: dict[type, AnyHandler[CommandContext] | IGuard] = {}
         self._guards: GuardMapping[Any] = defaultdict(list)
 
-    def include_handlers(
-        self, mapping: Mapping[type, AnyHandler[CommandContext] | IGuard]
-    ) -> None:
-        self._handlers.update(mapping)
+        self._subscribers: defaultdict[type, list[AnyHandler[EventContext]]] = (
+            defaultdict(list)
+        )
 
     @lru_cache(maxsize=None)
     def _get_handler(self, msg_type: Any):
@@ -101,77 +149,24 @@ class Sender:
 
         return guards[0]
 
-    async def send(self, msg: object, context: CommandContext) -> Any:
-        try:
-            handler = self._get_handler(type(msg))
-        except KeyError:
-            raise UnregisteredMessageError(msg)
-
-        if isinstance(handler, Handler):
-            return await handler(msg)
-        else:
-            return await handler(msg, context)
-
-    def include_guards(self, message_guards: defaultdict[type, list[IGuard]]):
-        for target, guards in message_guards.items():
-            self._guards[target].extend(guards)
-
-
-class Publisher:
-    _subscribers: defaultdict[type, list[AnyHandler[EventContext]]]
-
-    def __init__(self):
-        self._subscribers = defaultdict(list)
-
-    def include_listeners(
-        self, mapping: Mapping[type, Sequence[AnyHandler[EventContext]]]
-    ) -> None:
-        for msg_type, workers in mapping.items():
-            self._subscribers[msg_type].extend(workers)
-
-    async def publish(self, msg: Any, context: EventContext) -> None:
-        subscribers = self._subscribers[type(msg)]
-
-        for handler in subscribers:
-            if isinstance(handler, Handler):
-                await handler(msg)
-            else:
-                await handler(msg, context)
-
-
-class Anywise:
-    def __init__(
-        self,
-        *,
-        dg: DependencyGraph | None = None,
-        sender: Sender | None = None,
-        publisher: Publisher | None = None,
-    ):
-        self._dg = dg or DependencyGraph()
-        self._sender = sender or Sender()
-        self._publisher = publisher or Publisher()
-        self._dg.register_dependent(self, self.__class__)
-
-        """
-        self._resolved_hanlders: dict[type, Handler / ContextedHandler] = {}
-        """
-
     def _include_handlers(self, command_mapping: HandlerMapping[Any]):
         handler_mapping = {
             msg_type: self._create_handler(meta)
             for msg_type, meta in command_mapping.items()
         }
-        self._sender.include_handlers(handler_mapping)
+        self._handlers.update(handler_mapping)
 
     def _include_guards(self, guard_mapping: GuardMapping[Any]):
-        self._sender.include_guards(guard_mapping)
+        for target, guards in guard_mapping.items():
+            self._guards[target].extend(guards)
 
     def _include_listeners(self, event_mapping: ListenerMapping[Any]):
         listener_mapping = {
             msg_type: [(self._create_handler(meta)) for meta in metas]
             for msg_type, metas in event_mapping.items()
         }
-        self._publisher.include_listeners(listener_mapping)
+        for msg_type, workers in listener_mapping.items():
+            self._subscribers[msg_type].extend(workers)
 
     def _create_handler(self: "Anywise", meta: "FuncMeta[Any]"):
         raw_handler = meta.handler
@@ -182,6 +177,7 @@ class Anywise:
             owner_type = meta.owner_type
         else:
             owner_type = None
+            # return EntryHandler
             raw_handler = self.entry(meta.message_type, raw_handler)
 
         handler = (
@@ -221,9 +217,15 @@ class Anywise:
     async def send(self, msg: Any, context: CommandContext | None = None) -> Any:
         # TODO: iter through handlers of _sender, generate type stub file.
         context = context or {}
-        res = await self._sender.send(msg, context)
+
+        try:
+            handler = self._get_handler(type(msg))
+        except KeyError:
+            raise UnregisteredMessageError(msg)
+
+        res = await self._sender(msg, context, handler)
         return res
 
     async def publish(self, msg: Any, context: EventContext | None = None) -> None:
         context = context or MappingProxyType[str, Any]({})
-        await self._publisher.publish(msg, context)
+        await self._publisher(msg, context, self._subscribers[type(msg)])

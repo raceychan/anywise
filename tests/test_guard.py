@@ -6,6 +6,7 @@ from tests.conftest import CreateUser, UpdateUser, UserCommand
 user_registry = MessageRegistry(command_base=UserCommand)
 
 
+# @user_reigstry.guard_for(UserCommand, ProductCommand)
 class LogginGuard(BaseGuard):
     _next_guard: GuardFunc
 
@@ -15,10 +16,10 @@ class LogginGuard(BaseGuard):
     async def __call__(self, message: object, context: dict[str, object]):
         print(f"logging {message}")
 
-        await self._next_guard(message, context)
+        return await self._next_guard(message, context)
 
 
-user_registry.add_guard(UserCommand, LogginGuard())
+user_registry.add_guard([UserCommand], LogginGuard())
 
 
 @user_registry.pre_handle
@@ -31,8 +32,8 @@ async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
     print(f"\n in guard, {command=}")
 
 
-class TimeContext(ty.TypedDict):
-    processed_by: list[str]
+# class TimeContext(ty.TypedDict):
+#     processed_by: list[str]
 
 
 @user_registry.pre_handle

@@ -4,12 +4,6 @@ from typing import Any
 from ._itypes import GuardContext, GuardFunc, PostHandle
 
 """
-reference:
-https://www.starlette.io/middleware/#pure-asgi-middleware
-"""
-
-
-"""
 class AuthContext(TypedDict):
     token: str
     user: User
@@ -76,6 +70,8 @@ class Guard:
         base = f"Guard("
         if self.pre_handle:
             base += f"pre_handle={self.pre_handle}"
+        if self.next_guard:
+            base += f"next_guard={self._next_guard}"
         if self.post_handle:
             base += f"post_handle={self.post_handle}"
         base += ")"
@@ -97,21 +93,29 @@ class Guard:
     def chain_next(self, next_guard: GuardFunc, /) -> None:
         self._next_guard = next_guard
 
-    # def bind(self, command: type | list[type]) -> None:
-    #     """
-    #     bind commands to current guard
-
-    #     self._guard_for: list[type] = []
-    #     """
-
 
 class BaseGuard(ABC):
     """
-    An abstract class meant to be inherited
+    An abstract class for advanced user-defined guard.
+
+    Example
+    ---
 
     ```py
+    from typing import Any, MutableMapping
+    from loguru import Logger
+
+    type Context = MutableMapping[str, Any]
+
     class LogginGuard(BaseGuard):
-        async def __call__(self, message)
+        def __init__(self, next_guard: GuardFunc, logger: Logger):
+            super().__init__(next_guard)
+            self._logger = logger
+
+        async def __call__(self, message: Any, context: Context):
+            req_id = context["request_id"]
+            with logger.contextualize(request_id=req_id):
+                await self._next_guard(message, context)
     ```
 
     """
@@ -129,7 +133,7 @@ class BaseGuard(ABC):
     @abstractmethod
     async def __call__(self, message: Any, context: GuardContext) -> Any:
         """
-        This methos is meant to be overridden by subclasses
+        Override this method with similar logic to the following:
 
         ```py
         async def __call__(self, message, context):
@@ -139,3 +143,4 @@ class BaseGuard(ABC):
             return response
         ```
         """
+        raise NotImplementedError

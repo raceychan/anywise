@@ -48,11 +48,11 @@ def gather_commands(command_type: type) -> set[type]:
     if (origin := get_origin(command_type)) in union_meta:
         union_commands = get_args(origin)
         for command in union_commands:
-            command_types.union(gather_commands(command))
+            command_types |= gather_commands(command)
     else:
         sub_commands = set(command_type.__subclasses__())
         command_types.add(command_type)
-        command_types.union(sub_commands)
+        command_types |= sub_commands
     return command_types
 
 
@@ -195,7 +195,8 @@ class MessageRegistry[C, E]:
         """
         TODO?: we should transform gurad into funcmeta
         """
-        for cmdtype in self.extract_gurad_target(func):
+        target_commands = self.extract_gurad_target(func)
+        for cmdtype in target_commands:
             self.message_guards[cmdtype].append(Guard(pre_handle=func))
         return func
 
@@ -204,17 +205,17 @@ class MessageRegistry[C, E]:
             self.message_guards[cmdtype].append(Guard(post_handle=func))
         return func
 
-    def add_guard(
-        self, command_types: type[C] | Sequence[type[C]], guard: IGuard
-    ) -> IGuard:
+    def add_guard(self, command_types: Sequence[type[C]], guard: IGuard) -> IGuard:
         """
         command or a list of commands
         guard or a list of guards
         """
-        if not isinstance(command_types, Sequence):
-            command_types = [command_types]
+        all_commands: set[type] = set(command_types)
 
         for command in command_types:
-            self.message_guards[command].append(guard)
+            all_commands |= gather_commands(command)
+
+        for c in all_commands:
+            self.message_guards[c].append(guard)
 
         return guard
