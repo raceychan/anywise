@@ -1,25 +1,39 @@
 import typing as ty
 
+from loguru import logger
+
 from anywise import Anywise, BaseGuard, GuardFunc, MessageRegistry
 from tests.conftest import CreateUser, UpdateUser, UserCommand
 
 user_registry = MessageRegistry(command_base=UserCommand)
 
 
+from uuid import uuid4
+
+
 # @user_reigstry.guard_for(UserCommand, ProductCommand)
 class LogginGuard(BaseGuard):
     _next_guard: GuardFunc
 
-    def __init__(self, next_guard: GuardFunc | None = None):
+    def __init__(self, next_guard: GuardFunc | None = None, *, logger: ty.Any):
         super().__init__(next_guard)
+        self._logger = logger
 
     async def __call__(self, message: object, context: dict[str, object]):
-        print(f"logging {message}")
+        if (request_id := context.get("request_id")) is None:
+            context["request_id"] = request_id = str(uuid4())
 
-        return await self._next_guard(message, context)
+        with logger.contextualize(request_id=request_id):
+            try:
+                response = await self._next_guard(message, context)
+            except Exception as exc:
+                logger.error(exc)
+            else:
+                logger.success(f"request: {request_id}, got response `{response}`")
+                return response
 
 
-user_registry.add_guard([UserCommand], LogginGuard())
+user_registry.add_guard([UserCommand], LogginGuard(logger=logger))
 
 
 @user_registry.pre_handle

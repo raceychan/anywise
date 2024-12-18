@@ -107,17 +107,27 @@ class BaseGuard(ABC):
 
     type Context = MutableMapping[str, Any]
 
+
     class LogginGuard(BaseGuard):
-        def __init__(self, next_guard: GuardFunc, logger: Logger):
+        _next_guard: GuardFunc
+
+        def __init__(self, next_guard: GuardFunc | None = None, *, logger: Any):
             super().__init__(next_guard)
             self._logger = logger
 
         async def __call__(self, message: Any, context: Context):
-            req_id = context["request_id"]
-            with logger.contextualize(request_id=req_id):
-                await self._next_guard(message, context)
-    ```
+            if (request_id := context.get("request_id")) is None:
+                context["request_id"] = request_id = str(uuid4())
 
+            with logger.contextualize(request_id=request_id):
+                try:
+                    response = await self._next_guard(message, context)
+                except Exception as exc:
+                    logger.error(exc)
+                else:
+                    logger.success(f"request: {request_id}, got response `{response}`")
+                    return response
+    ```
     """
 
     def __init__(self, next_guard: GuardFunc | None = None):

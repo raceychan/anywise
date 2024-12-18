@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Awaitable, Callable, Literal, Protocol, TypeGuard
+from typing import Any, Awaitable, Callable, Final, Literal, Protocol, TypeGuard
 
 type HandlerMapping[Command] = dict[type[Command], "FuncMeta[Command]"]
 type ListenerMapping[Event] = dict[type[Event], list[FuncMeta[Event]]]
@@ -47,6 +47,13 @@ class MethodMeta[Message](FuncMeta[Message]):
 
 
 class Result[T, E]:
+    """
+    def divide(a: int, b: int) -> Result[int, ZeroDivisionError]:
+        if b == 0:
+            raise ZeroDivisionError
+        return a / b
+    """
+
     ok: T
     err: E | None = None
 
@@ -63,8 +70,9 @@ class _Missed:
         return False
 
 
-Missed = _Missed
+Missed: Final[type[_Missed]] = _Missed
 MISSING = _Missed()
+
 
 type Maybe[T] = T | _Missed
 
