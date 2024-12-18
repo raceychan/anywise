@@ -15,10 +15,17 @@ type EventContext = MappingProxyType[str, Any]
 
 
 class IGuard(Protocol):
-    next_guard: GuardFunc | None
+
+    @property
+    def next_guard(self) -> GuardFunc | None: ...
+
     # def bind(self, command: type | list[type]) -> None: ...
 
-    def chain_next(self, guard: GuardFunc) -> None: ...
+    def chain_next(self, next_guard: GuardFunc, /) -> None:
+        """
+        self._next_guard = next_guard
+        """
+
     async def __call__(self, message: Any, context: GuardContext) -> Any: ...
 
 
@@ -58,6 +65,7 @@ class _Missed:
         return False
 
 
+Missed = _Missed
 MISSING = _Missed()
 
 type Maybe[T] = T | _Missed

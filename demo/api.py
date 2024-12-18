@@ -21,7 +21,8 @@ async def read_todos(anywise: FastWise) -> list[dict[str, ty.Any]]:
 
 @todo_router.post("/")
 async def _(command: CreateTodo, anywise: FastWise) -> str:
-    return await anywise.send(command)
+    res = await anywise.send(command)
+    return res
 
 
 class AppState(ty.TypedDict):
@@ -30,7 +31,7 @@ class AppState(ty.TypedDict):
 
 async def lifespan(app: FastAPI) -> ty.AsyncGenerator[AppState, None]:
     anywise = Anywise()
-    anywise.include([registry])
+    anywise.include(registry)
     async with anywise.scope("app") as app_scope:
         app_scope.register_dependent(anywise, Anywise)
         engine = await app_scope.resolve(AsyncEngine)

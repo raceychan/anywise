@@ -1,11 +1,7 @@
+
 import pytest
 
-from anywise import (  # handler_registry,; listener_registry,
-    Anywise,
-    ConcurrentPublisher,
-    MessageRegistry,
-    inject,
-)
+from anywise import Anywise, ConcurrentPublisher, MessageRegistry, inject
 from tests.conftest import (
     CreateUser,
     RemoveUser,
@@ -16,14 +12,7 @@ from tests.conftest import (
     UserNameUpdated,
 )
 
-# user_cmd_handler = make_registry(command_base=UserCommand)
-# user_event_handler = make_registry(event_base=UserEvent)
-
 user_message_registry = MessageRegistry(event_base=UserEvent, command_base=UserCommand)
-
-"""
-make_registry(base_command = UserCommand)
-"""
 
 
 @user_message_registry
@@ -48,6 +37,9 @@ def user_service_factory(asynwise: Anywise) -> "UserService":
     return UserService(name="test", anywise=asynwise)
 
 
+
+
+
 @user_message_registry
 async def update_user(
     cmd: UpdateUser,
@@ -69,8 +61,8 @@ async def react_to_event(
 
 @pytest.fixture(scope="module")
 def asynwise() -> Anywise:
-    aw = Anywise(publisher_factory=ConcurrentPublisher)
-    aw.include([user_message_registry])
+    aw = Anywise(publisher=ConcurrentPublisher())
+    aw.include(user_message_registry)
     return aw
 
 

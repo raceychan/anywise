@@ -7,12 +7,15 @@ from typing import Any, Callable, Sequence, Union, get_args, get_origin, overloa
 from ididi import DependencyGraph, INode
 
 from ._itypes import (
+    MISSING,
     FuncMeta,
     GuardMapping,
     HandlerMapping,
     IGuard,
     ListenerMapping,
+    Maybe,
     MethodMeta,
+    Missed,
 )
 from ._visitor import Target, collect_handlers, collect_listeners
 from .errors import MessageHandlerNotFoundError
@@ -27,32 +30,31 @@ from .guard import Guard, GuardFunc, PostHandle
 #     """
 
 
-class MessageRegistry:
+class MessageRegistry[C, E]:
     @overload
     def __init__(
-        self, *, command_base: type[Any], graph: DependencyGraph | None = None
-    ) -> None: ...
-
-    @overload
-    def __init__(
-        self, *, event_base: type[Any], graph: DependencyGraph | None = None
+        self,
+        *,
+        command_base: type[C],
+        event_base: type[E] = Missed,
+        graph: Maybe[DependencyGraph] = MISSING,
     ) -> None: ...
 
     @overload
     def __init__(
         self,
         *,
-        command_base: type[Any],
-        event_base: type[Any],
-        graph: DependencyGraph | None = None,
+        event_base: type[E],
+        command_base: type[C] = Missed,
+        graph: Maybe[DependencyGraph] = MISSING,
     ) -> None: ...
 
     def __init__(
         self,
         *,
-        command_base: type[Any] | None = None,
-        event_base: type[Any] | None = None,
-        graph: DependencyGraph | None = None,
+        command_base: Maybe[type[C]] = MISSING,
+        event_base: Maybe[type[E]] = MISSING,
+        graph: Maybe[DependencyGraph] = MISSING,
     ):
         self._command_base = command_base
         self._event_base = event_base
@@ -173,9 +175,10 @@ class MessageRegistry:
             cmd_types = get_args(cmd_type)
         else:
             cmd_types = [cmd_type]
+
         return cmd_types
 
-    def pre_handle(self, func: GuardFunc):
+    def pre_handle(self, func: GuardFunc) -> GuardFunc:
         """
         TODO?: we should transform gurad into funcmeta
         """
@@ -188,9 +191,11 @@ class MessageRegistry:
             self.message_guards[cmdtype].append(Guard(post_handle=func))
         return func
 
-    def add_guard(self, targets: type | Sequence[type], guard: IGuard):
+    def add_guard(self, targets: type[C] | Sequence[type[C]], guard: IGuard) -> IGuard:
         if not isinstance(targets, Sequence):
             targets = [targets]
 
         for target in targets:
             self.message_guards[target].append(guard)
+
+        return guard

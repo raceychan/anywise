@@ -1,9 +1,24 @@
 import typing as ty
 
-from anywise import Anywise, MessageRegistry
+from anywise import Anywise, BaseGuard, GuardFunc, MessageRegistry
 from tests.conftest import CreateUser, UpdateUser, UserCommand
 
 user_registry = MessageRegistry(command_base=UserCommand)
+
+
+class LogginGuard(BaseGuard):
+    _next_guard: GuardFunc
+
+    def __init__(self, next_guard: GuardFunc | None = None):
+        super().__init__(next_guard)
+
+    async def __call__(self, message: object, context: dict[str, object]):
+        print(f"logging {message}")
+
+        await self._next_guard(message, context)
+
+
+user_registry.add_guard(UserCommand, LogginGuard())
 
 
 @user_registry.pre_handle
@@ -13,7 +28,11 @@ async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
     else:
         context["processed_by"].append("1")
 
-    print("\n", command)
+    print(f"\n in guard, {command=}")
+
+
+class TimeContext(ty.TypedDict):
+    processed_by: list[str]
 
 
 @user_registry.pre_handle
@@ -46,8 +65,6 @@ async def post(
 
 async def test_guard():
     aw = Anywise()
-    aw.include([user_registry])
+    aw.include(user_registry)
     await aw.send(CreateUser("1", "2"))
     await aw.send(UpdateUser("1", "2", "3"))
-
-

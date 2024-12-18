@@ -96,10 +96,10 @@ git-push:
 # Build and publish operations
 hatch-build:
 	@echo "Building version $(VERSION)..."
-	@$(PIXI_CMD) hatch build
+	@$(UV_CMD) hatch build
 
 pypi-release:
-	@$(PIXI_CMD) publish
+	@$(UV_CMD) publish
 	@git branch -d $(BRANCH)
 	@git push origin --delete $(BRANCH)
 

@@ -44,10 +44,10 @@ class GraphBuilder:
         return [cls for cls in class_type.__subclasses__()]
 
 
-def test_graph():
-    builder = GraphBuilder()
-    graph = builder.build_graph(UserCommand)
+# def test_graph():
+#     builder = GraphBuilder()
+#     graph = builder.build_graph(UserCommand)
 
-    from pprint import pprint
+#     from pprint import pprint
 
-    pprint(graph)
+#     pprint(graph)

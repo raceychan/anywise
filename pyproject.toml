@@ -34,6 +34,7 @@ dev = [
     "uvicorn>=0.34.0",
     "aiosqlite>=0.20.0",
     "hatch>=1.14.0",
+    "pyright>=1.1.391",
 ]
 
 

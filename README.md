@@ -1,6 +1,7 @@
 # Anywise
 
-Anywise let you write your application anywise.
+Anywise is a framework for encapsulating the business logic of your application.
+
 
 ---
 
@@ -15,11 +16,6 @@ Documentation: On its way here...
 1. promote best practices and enterprise architecture in python
 2. isolating bussiness logic from input ports, allowing one app for web api, kafka, flink, etc.
 3. let you write less code than other wise
-
-## Philosophy
-
-1. non-intrusive
-2. minimalism
 
 ## Install
 
@@ -56,9 +52,8 @@ async def notify_user(event: UserCreated, service: EmailSender):
 
 async def main():
      anywise = AnyWise()
-     anywise.include([userhandler, userlistener])
-     command = CreateUser()
-     result = await anywise.send(command)
+     anywise.include(user_registry)
+     result = await anywise.send(CreateUser())
 ```
 
 ## Tutorial
@@ -93,8 +88,11 @@ async def handler_create(create_user: CreateUser, context: dict[str, ty.Any]):
 @user_registry
 async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
     return "done"
+```
 
+#### Guard that guard for a base command will handle all subcommand
 
+```py
 @user_registry.pre_handle
 async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
     if not context.get("processed_by"):
@@ -105,12 +103,29 @@ async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
 
 in this case, `mark` will be called before `handler_update` or `handler_create` gets called.
 
+a handler can also handle multiple command type
+
+```py
+@user_registry
+async def handle_multi(command: CreateUser | UpdateUser, context: dict[str, ty.Any]):
+    ...
+```
+
+in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
+
 ## Features
 
 - builtin dependency injection
 - handler guards
 - framework integration
 - remote handler
+
+## Current limitations
+
+- currently `Anywise.send` does not provide accurate typing information,
+but instead return Any. this have not runtime effect, but is a good to have feature.
+It is expected to be solved before anywise v1.0.0
+
 
 ## FAQ
 

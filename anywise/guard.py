@@ -1,6 +1,7 @@
+from abc import ABC, abstractmethod
 from typing import Any
 
-from ._itypes import GuardFunc, PostHandle
+from ._itypes import GuardContext, GuardFunc, PostHandle
 
 """
 reference:
@@ -63,9 +64,13 @@ class Guard:
         pre_handle: GuardFunc | None = None,
         post_handle: PostHandle[Any] | None = None,
     ):
-        self.next_guard = next_guard
+        self._next_guard = next_guard
         self.pre_handle = pre_handle
         self.post_handle = post_handle
+
+    @property
+    def next_guard(self) -> GuardFunc | None:
+        return self._next_guard
 
     def __repr__(self):
         base = f"Guard("
@@ -76,21 +81,21 @@ class Guard:
         base += ")"
         return base
 
-    async def __call__(self, message: Any, context: dict[str, Any]) -> Any:
+    async def __call__(self, message: Any, context: GuardContext) -> Any:
         # we should accept handler here so we can add decorator to it
         if self.pre_handle:
             await self.pre_handle(message, context)
 
-        if self.next_guard:
-            response = await self.next_guard(message, context)
+        if self._next_guard:
+            response = await self._next_guard(message, context)
             if self.post_handle:
                 return await self.post_handle(message, context, response)
             return response
 
         raise Exception(f"no handler after {self}")
 
-    def chain_next(self, guard: GuardFunc) -> None:
-        self.next_guard = guard
+    def chain_next(self, next_guard: GuardFunc, /) -> None:
+        self._next_guard = next_guard
 
     # def bind(self, command: type | list[type]) -> None:
     #     """
@@ -100,15 +105,37 @@ class Guard:
     #     """
 
 
-class BaseGuard:
-    def __init__(self, next_guard: GuardFunc):
-        self.next_guard = next_guard
+class BaseGuard(ABC):
+    """
+    An abstract class meant to be inherited
 
-    def chain_next(self, guard: GuardFunc) -> None:
-        self.next_guard = guard
+    ```py
+    class LogginGuard(BaseGuard):
+        async def __call__(self, message)
+    ```
 
-    async def __call__(self, message: Any, context: dict[str, Any]) -> Any:
+    """
+
+    def __init__(self, next_guard: GuardFunc | None = None):
+        self._next_guard = next_guard
+
+    @property
+    def next_guard(self) -> GuardFunc | None:
+        return self._next_guard
+
+    def chain_next(self, next_guard: GuardFunc) -> None:
+        self._next_guard = next_guard
+
+    @abstractmethod
+    async def __call__(self, message: Any, context: GuardContext) -> Any:
         """
-        response = await self.next_guard
-        return response
+        This methos is meant to be overridden by subclasses
+
+        ```py
+        async def __call__(self, message, context):
+            # write your pre-handle logic
+            response = await self.next_guard
+            # write your post-handle logic
+            return response
+        ```
         """
