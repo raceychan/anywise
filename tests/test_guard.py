@@ -11,12 +11,11 @@ user_registry = MessageRegistry(command_base=UserCommand)
 from uuid import uuid4
 
 
-# @user_reigstry.guard_for(UserCommand, ProductCommand)
 class LogginGuard(BaseGuard):
     _next_guard: GuardFunc
 
-    def __init__(self, next_guard: GuardFunc | None = None, *, logger: ty.Any):
-        super().__init__(next_guard)
+    def __init__(self, *, logger: ty.Any):
+        super().__init__()
         self._logger = logger
 
     async def __call__(self, message: object, context: dict[str, object]):

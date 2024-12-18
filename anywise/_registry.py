@@ -19,7 +19,7 @@ from ._itypes import (
 )
 from ._visitor import Target, collect_handlers, collect_listeners
 from .errors import MessageHandlerNotFoundError
-from .guard import Guard, GuardFunc, PostHandle
+from .guard import BaseGuard, Guard, GuardFunc, PostHandle
 
 # def auto_collect(msg_type: type, dir: pathlib.Path):
 #     """
@@ -219,3 +219,11 @@ class MessageRegistry[C, E]:
             self.message_guards[c].append(guard)
 
         return guard
+
+    def guard_for(self, *commands: type[C]):
+        def receiver[T: BaseGuard](cls: type[T]) -> type[T]:
+            # TODO: resolve cls
+            self.add_guard(commands, cls)
+            return cls
+
+        return receiver

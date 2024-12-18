@@ -137,7 +137,7 @@ class BaseGuard(ABC):
     def next_guard(self) -> GuardFunc | None:
         return self._next_guard
 
-    def chain_next(self, next_guard: GuardFunc) -> None:
+    def chain_next(self, next_guard: GuardFunc, /) -> None:
         self._next_guard = next_guard
 
     @abstractmethod

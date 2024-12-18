@@ -75,13 +75,12 @@ when a function is registered, anywise will can through its signature, if any pa
 
 when a class is registered, anywise will scan through its pulic methods, then repeat the steps to functions.
 
-### use CommandGuard to intercept handler call
+### use `Guard` to intercept command handling.
 
 ```py
 from anywise import AnyWise, GuardRegistry, handler_registry
 
 user_registry = MessageRegistry(command_base=UserCommand)
-
 
 @user_registry
 async def handler_create(create_user: CreateUser, context: dict[str, ty.Any]):
@@ -116,6 +115,38 @@ async def handle_multi(command: CreateUser | UpdateUser, context: dict[str, ty.A
 ```
 
 in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
+
+#### Advanced user-defined Guard
+
+You might define a more advanced stateful guard by inheriting from BaseGuard
+
+Example:
+
+```py
+class LogginGuard(BaseGuard):
+    _next_guard: GuardFunc
+
+    def __init__(self, logger: ty.Any):
+        super().__init__()
+        self._logger = logger
+
+    async def __call__(self, message: object, context: dict[str, object]):
+        if (request_id := context.get("request_id")) is None:
+            context["request_id"] = request_id = str(uuid4())
+
+        with logger.contextualize(request_id=request_id):
+            try:
+                response = await self._next_guard(message, context)
+            except Exception as exc:
+                logger.error(exc)
+            else:
+                logger.success(
+                    f"Logging request: {request_id}, got response `{response}`"
+                )
+                return response
+
+user_registry.add_guard([UserCommand], LogginGuard(logger=logger))
+```
 
 ## Features
 
