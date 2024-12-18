@@ -30,6 +30,32 @@ from .guard import Guard, GuardFunc, PostHandle
 #     """
 
 
+def gather_commands(command_type: type) -> set[type]:
+    """
+    get a list of command from an annotation of command
+    if is a union of commands, collect each of them
+    else
+
+    """
+    command_types: set[type] = set()
+
+    if sys.version_info >= (3, 10):
+        union_meta = (UnionType, Union)
+    else:
+        union_meta = (Union,)
+
+    # TODO: recursive
+    if (origin := get_origin(command_type)) in union_meta:
+        union_commands = get_args(origin)
+        for command in union_commands:
+            command_types.union(gather_commands(command))
+    else:
+        sub_commands = set(command_type.__subclasses__())
+        command_types.add(command_type)
+        command_types.union(sub_commands)
+    return command_types
+
+
 class MessageRegistry[C, E]:
     @overload
     def __init__(
@@ -157,26 +183,13 @@ class MessageRegistry[C, E]:
         self._register_eventlisteners(handler)
         return handler
 
-    def extract_gurad_target(self, func: GuardFunc | PostHandle[Any]) -> Sequence[type]:
+    def extract_gurad_target(self, func: GuardFunc | PostHandle[Any]) -> set[type]:
         func_params = list(inspect.signature(func).parameters.values())
-
-        if sys.version_info >= (3, 10):
-            union_meta = (UnionType, Union)
-        else:
-            union_meta = (Union,)
-
         if not func_params:
-            return []
+            return set()
 
-        cmd_param = func_params[0]
-
-        cmd_type = cmd_param.annotation
-        if get_origin(cmd_type) in union_meta:
-            cmd_types = get_args(cmd_type)
-        else:
-            cmd_types = [cmd_type]
-
-        return cmd_types
+        command_type = func_params[0].annotation
+        return gather_commands(command_type)
 
     def pre_handle(self, func: GuardFunc) -> GuardFunc:
         """
@@ -191,11 +204,17 @@ class MessageRegistry[C, E]:
             self.message_guards[cmdtype].append(Guard(post_handle=func))
         return func
 
-    def add_guard(self, targets: type[C] | Sequence[type[C]], guard: IGuard) -> IGuard:
-        if not isinstance(targets, Sequence):
-            targets = [targets]
+    def add_guard(
+        self, command_types: type[C] | Sequence[type[C]], guard: IGuard
+    ) -> IGuard:
+        """
+        command or a list of commands
+        guard or a list of guards
+        """
+        if not isinstance(command_types, Sequence):
+            command_types = [command_types]
 
-        for target in targets:
-            self.message_guards[target].append(guard)
+        for command in command_types:
+            self.message_guards[command].append(guard)
 
         return guard

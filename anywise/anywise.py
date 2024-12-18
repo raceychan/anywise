@@ -85,10 +85,11 @@ class Sender:
         """
         we don't need to look up msg_type.__mro__, 
         but instead, when we add guard in `MessageRegistry.extract_gurad_target`
-
+        we lookthrough its subclass by command.__subclasses__()
         """
-        for base in reversed(msg_type.__mro__):
-            guards.extend(self._guards[base])
+
+        for guard in self._guards[msg_type]:
+            guards.append(guard)
 
         if not guards:
             return handler
