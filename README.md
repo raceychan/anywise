@@ -1,7 +1,8 @@
 # Anywise
 
-Anywise is a framework for encapsulating the business logic of your application.
+Anywise is a framework for decoupling the business logic of your application from infrastructures.
 
+This allows you to use the same code to handle message from various message sources, web api, message queue, AWS lambda, etc.
 
 ---
 
@@ -24,6 +25,9 @@ pip install anywise
 ```
 
 ## Quck Start
+
+Anywise integrates [ididi](https://github.com/raceychan/ididi) for dependency injection.
+define your dependency after the message parameter, they will be resolved when you send a command or publish an event.
 
 ```py
 from anywise import Anywise, handler_registry, inject
@@ -90,7 +94,7 @@ async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
     return "done"
 ```
 
-#### Guard that guard for a base command will handle all subcommand
+#### Guard that guard for a base command will handle all subcommand of the base command
 
 ```py
 @user_registry.pre_handle
@@ -122,10 +126,9 @@ in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
 
 ## Current limitations
 
-- currently `Anywise.send` does not provide accurate typing information,
-but instead return Any. this have not runtime effect, but is a good to have feature.
+- currently `Anywise.send` does not provide accurate typing information, but annotated as return `typing.Any`
+This have no runtime effect, but is a good to have feature.
 It is expected to be solved before anywise v1.0.0
-
 
 ## FAQ
 

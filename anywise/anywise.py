@@ -170,10 +170,8 @@ class Anywise(InjectMixin):
         super().__init__(dg)
         self._sender = sender or default_send
         self._publisher = publisher or default_publish
-
         self._handler_manager = HandlerManager(self._dg)
         self._listener_manager = ListenerManager(self._dg)
-
         self._dg.register_dependent(self, self.__class__)
 
     def include(self, *registries: MessageRegistry[Any, Any]) -> None:
@@ -182,11 +180,7 @@ class Anywise(InjectMixin):
             self._handler_manager.include_handlers(msg_registry.command_mapping)
             self._handler_manager.include_guards(msg_registry.message_guards)
             self._listener_manager.include_listeners(msg_registry.event_mapping)
-
         self._dg.static_resolve_all()
-
-    async def resolve[T](self, dep_type: type[T]) -> T:
-        return await self._dg.aresolve(dep_type)
 
     def scope(self, name: str | None = None):
         return self._dg.scope(name)
