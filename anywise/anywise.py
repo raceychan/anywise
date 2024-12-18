@@ -33,7 +33,6 @@ async def default_publish(
     context: EventContext,
     listeners: list[Callable[[Any, EventContext], Awaitable[None]]],
 ) -> None:
-
     for listener in listeners:
         await listener(message, context)
 
@@ -43,52 +42,6 @@ def context_wrapper(origin: Callable[[Any], Any]):
         return await origin(message)
 
     return inner
-
-
-class HandlerBase[HandlerType]:
-    def __init__(
-        self,
-        *,
-        anywise: "Anywise",
-        handler: HandlerType,
-        owner_type: type | None,
-    ):
-        self._anywise = anywise
-
-        self._handler: HandlerType = handler
-        self._owner_type = owner_type
-        self._is_solved = False
-
-    def __repr__(self):
-        handler_repr = (
-            f"{self._owner_type}: {self._handler}"
-            if self._owner_type
-            else {self._handler}
-        )
-        return f"{self.__class__.__name__}({handler_repr})"
-
-    async def __call__(self, message: Any, context: Any) -> Any: ...
-class Handler(HandlerBase[Callable[[Any], Any]]):
-    async def __call__(self, message: Any, _: Any = None) -> Any:
-        "For compatibility with ContextedHandler, we use `_` to receive context"
-        if self._is_solved:
-            return await self._handler(message)
-        if self._owner_type:
-            instance: Any = await self._anywise.resolve(self._owner_type)
-            self._handler = MethodType(self._handler, instance)
-        self._is_solved = True
-        return await self._handler(message)
-
-
-class ContextedHandler[Ctx](HandlerBase[Callable[[Any, Ctx], Any]]):
-    async def __call__(self, message: Any, context: Ctx) -> Any:
-        if self._is_solved:
-            return await self._handler(message, context)
-        if self._owner_type:
-            instance: Any = await self._anywise.resolve(self._owner_type)
-            self._handler = MethodType(self._handler, instance)
-        self._is_solved = True
-        return await self._handler(message, context)
 
 
 class InjectMixin:
@@ -234,10 +187,6 @@ class Anywise(InjectMixin):
 
     async def resolve[T](self, dep_type: type[T]) -> T:
         return await self._dg.aresolve(dep_type)
-
-    def entry(self, message_type: type, func: Callable[..., Any]):
-        ignore = (message_type, "context")
-        return self._dg.entry(ignore=ignore)(func)
 
     def scope(self, name: str | None = None):
         return self._dg.scope(name)
