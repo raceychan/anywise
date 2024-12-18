@@ -29,7 +29,9 @@ class LogginGuard(BaseGuard):
             except Exception as exc:
                 logger.error(exc)
             else:
-                logger.success(f"request: {request_id}, got response `{response}`")
+                logger.success(
+                    f"Logging request: {request_id}, got response `{response}`"
+                )
                 return response
 
 
