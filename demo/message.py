@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import uuid4
 
+# App Layer
+
 
 def uuid_factory() -> str:
     return str(uuid4())
@@ -21,9 +23,10 @@ class CreateTodo(TodoCommand):
     title: str
     content: str
 
+
 @dataclass
-class ListTodos(TodoCommand):
-    ...
+class ListTodos(TodoCommand): ...
+
 
 @dataclass(kw_only=True)
 class TodoCreated(TodoEvent):

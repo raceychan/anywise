@@ -2,7 +2,7 @@ from asyncio import to_thread
 from collections import defaultdict
 from functools import lru_cache, partial
 from types import MappingProxyType, MethodType
-from typing import Any, Awaitable, Callable, cast
+from typing import Any, Awaitable, Callable, Sequence, cast
 
 from ididi import DependencyGraph
 
@@ -163,18 +163,23 @@ class Anywise(InjectMixin):
 
     def __init__(
         self,
-        *,
-        dg: DependencyGraph | None = None,
+        *registries: MessageRegistry[Any, Any],
+        dependency_graph: DependencyGraph | None = None,
         sender: SendStrategy | None = None,
         publisher: PublishStrategy | None = None,
     ):
-        dg = dg or DependencyGraph()
-        super().__init__(dg)
+        dependency_graph = dependency_graph or DependencyGraph()
+        super().__init__(dependency_graph)
+
+        # TODO: context factory
+
         self._sender = sender or default_send
         self._publisher = publisher or default_publish
         self._handler_manager = HandlerManager(self._dg)
         self._listener_manager = ListenerManager(self._dg)
         self._dg.register_dependent(self, self.__class__)
+
+        self.include(*registries)
 
     def include(self, *registries: MessageRegistry[Any, Any]) -> None:
         for msg_registry in registries:
@@ -188,12 +193,14 @@ class Anywise(InjectMixin):
         return self._dg.scope(name)
 
     async def send(self, msg: object, context: CommandContext | None = None) -> Any:
-        context = context or {}
+        if context is None:
+            context = {}
         handler = await self._handler_manager.get_handler(type(msg))
-        res = await self._sender(msg, context, handler)
-        return res
+        return await self._sender(msg, context, handler)
 
     async def publish(self, msg: object, context: EventContext | None = None) -> None:
-        context = context or MappingProxyType[str, Any]({})
+        if context is None:
+            context = MappingProxyType[str, Any]({})
+
         resolved_listeners = await self._listener_manager.get_listener(type(msg))
         await self._publisher(msg, context, resolved_listeners)

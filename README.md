@@ -161,48 +161,6 @@ user_registry.add_guard([UserCommand], LogginGuard(logger=logger))
 This have no runtime effect, but is a good to have feature.
 It is expected to be solved before anywise v1.0.0
 
-## Data flow
-
-```mermaid
-sequenceDiagram
-    participant MS as MessageSource
-    participant D as Decoder
-    box Anywise Core
-        participant CG as CommandGuards
-        participant CH as CommandHandler
-        participant EH as EventHandlers
-    end
-    participant E as Encoder
-    participant ES as EventSink
-
-    %% Command Flow
-    alt command
-        MS->>D: Raw Message
-        Note right of D: decode as command
-        D->>CG: Command Message
-        Note right of CG: validate command
-        CG->>CH: Validated Command
-        Note right of CH: handle command
-        Note right of CH: mutate state
-        CH->>EH: Publish Events
-        EH->>E: Event Message
-        Note right of E: encode envents
-        E->>ES: sink Events
-        Note right of ES: persistent events
-    else query
-        %% Query Flow
-        MS->>D: Raw Message
-        Note right of D: decode as Query
-        D->>CG: Query Message
-        CG->>CH: Query  Message
-        Note right of CH: execute Query
-        CH-->>CG: Query Result
-        Note left of CG: validate result
-        CG-->>D: Validated Result 
-        D-->>MS: Response
-    end
-```
-
 ## FAQ
 
 On its way here...

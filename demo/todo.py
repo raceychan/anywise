@@ -6,8 +6,10 @@ from sqlalchemy.sql import insert, select
 
 from anywise import Anywise, MessageRegistry
 
-from .db import Events, Todos
-from .model import CreateTodo, ListTodos, TodoCommand, TodoCreated, TodoEvent
+from .message import CreateTodo, ListTodos, TodoCommand, TodoCreated, TodoEvent
+from .table import Events, Todos
+
+# App layer
 
 registry = MessageRegistry(command_base=TodoCommand, event_base=TodoEvent)
 

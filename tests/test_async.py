@@ -57,8 +57,7 @@ async def react_to_event(
 
 @pytest.fixture(scope="module")
 def asynwise() -> Anywise:
-    aw = Anywise(publisher=concurrent_publish)
-    aw.include(user_message_registry)
+    aw = Anywise(user_message_registry, publisher=concurrent_publish)
     return aw
 
 

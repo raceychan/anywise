@@ -80,7 +80,6 @@ async def post(
 
 
 async def test_guard():
-    aw = Anywise()
-    aw.include(user_registry)
+    aw = Anywise(user_registry)
     await aw.send(CreateUser("1", "2"))
     await aw.send(UpdateUser("1", "2", "3"))

@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from anywise import Anywise
 from anywise.integration.fastapi import FastWise
 
-from .db import create_tables
-from .model import CreateTodo, ListTodos
+from .message import CreateTodo, ListTodos
+from .table import create_tables
 from .todo import registry
 
 todo_router = APIRouter(prefix="/todos")
