@@ -14,6 +14,12 @@ reduce boilerplace code, make api easier to work with
 
 now will build guards before send, now the order of anywise.include(guard_registry) does not matter
 
+## version 0.1.3
+
+- add `BaseGuard`, user can inherit from it then override `async def __call__`.
+- update docs
+- improve command resolve logic
+
 ### version 1.0.0
 
 - create a cli stub generator for anywise.send, something like

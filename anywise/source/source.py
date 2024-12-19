@@ -34,3 +34,27 @@ class KafkaSource: ...
 
 
 class GRPCSource: ...
+
+
+
+from ..anywise import Anywise
+
+"""
+class KafkaSource:
+    def __init__(self, client, anywise: Anywise)
+        self.client = client
+        self.anywise = anywise
+
+    
+    async def start(self): ...
+    async def stop(self): ...
+
+    
+    async def polling(self):
+        ...
+
+        
+async def main():
+    async with KafkaSource() as source:
+        await source.polling()
+"""

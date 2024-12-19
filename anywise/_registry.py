@@ -207,7 +207,7 @@ class MessageRegistry[C, E]:
 
     def add_guard(self, command_types: Sequence[type[C]], guard: IGuard) -> IGuard:
         """
-        command or a list of commands
+        a sequence of commands
         guard or a list of guards
         """
         all_commands: set[type] = set(command_types)

@@ -52,7 +52,7 @@ define increment_patch_version
 endef
 
 # Main release target
-release: check-branch check-version update-version git-commit git-merge git-tag git-push hatch-build new-branch
+release: check-branch check-version update-version git-commit git-merge git-tag git-push uv-build new-branch
 
 # Version checking and updating
 check-branch:
@@ -94,12 +94,12 @@ git-push:
 	@git push origin "v$(VERSION)"
 
 # Build and publish operations
-hatch-build:
+uv-build:
 	@echo "Building version $(VERSION)..."
-	@$(UV_CMD) hatch build
+	@uv build
 
 pypi-release:
-	@$(UV_CMD) publish
+	@uv publish
 	@git branch -d $(BRANCH)
 	@git push origin --delete $(BRANCH)
 

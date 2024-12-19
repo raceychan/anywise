@@ -6,10 +6,7 @@ NOTE: unpack might be great for query
 import typing as ty
 
 
-class IQuery[R]: ...
-
-
-class SQLQuery[R](IQuery[R]): ...
+class SQLQuery[Q]: ...
 
 
 class ProductSalesByWeek:
@@ -42,9 +39,8 @@ class Connection: ...
 def query(t: type) -> ty.Callable[..., ty.Any]: ...
 
 
-@query(ProductSalesByWeek)
 async def get_sales_report(
-    conn: Connection, query: SQLQuery[SalesReport]
+    conn: Connection, query: SQLQuery[ProductSalesByWeek]
 ) -> SalesReport:
     """
     This function could be auto generated, e.g.

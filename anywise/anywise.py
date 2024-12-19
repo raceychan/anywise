@@ -87,6 +87,9 @@ class HandlerManager(InjectMixin):
 
     @lru_cache(maxsize=None)
     def _build_handler(self, msg_type: Any, handler: Callable[..., Any]):
+        """
+        # TODO: resolve guards
+        """
         guards: list[IGuard] = []
 
         for guard in self._guards[msg_type]:
@@ -153,7 +156,6 @@ class Anywise(InjectMixin):
 
     publish_strategy: PublishingStrategy
     def _(msg: object, context: CommandContext, listeners): ...
-
     """
 
     _sender: SendStrategy
