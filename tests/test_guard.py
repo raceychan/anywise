@@ -2,7 +2,7 @@ import typing as ty
 
 from loguru import logger
 
-from anywise import Anywise, BaseGuard, GuardFunc, IContext, MessageRegistry, use
+from anywise import Anywise, BaseGuard, GuardFunc, IContext, MessageRegistry
 from tests.conftest import CreateUser, UpdateUser, UserCommand
 
 user_registry = MessageRegistry(command_base=UserCommand)

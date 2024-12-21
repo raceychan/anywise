@@ -6,7 +6,7 @@ test:
 feat:
 	uv urn pytest tests/test_feat.py
 
-dev:
+demo:
 	uv run python -m demo
 
 .PHONY: release
