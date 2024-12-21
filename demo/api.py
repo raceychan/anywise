@@ -6,20 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from anywise import Anywise
 from anywise.integration.fastapi import FastWise
 
-from .message import CreateTodo, ListTodos
+from .message import CreateTodo, ListTodos, Todo
 from .table import create_tables
 from .todo import registry
 
-todo_router = APIRouter(prefix="/todos")
+todo_router = APIRouter()
 
 
-@todo_router.get("/")
-async def read_todos(anywise: FastWise) -> list[dict[str, ty.Any]]:
+@todo_router.get("/todos")
+async def read_todos(anywise: FastWise) -> list[Todo]:
     res = await anywise.send(ListTodos())
     return res
 
 
-@todo_router.post("/")
+@todo_router.post("/todos")
 async def _(command: CreateTodo, anywise: FastWise) -> str:
     res = await anywise.send(command)
     return res

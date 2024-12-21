@@ -1,7 +1,9 @@
 import ast
 import inspect
+import sys
 from collections import defaultdict
-from typing import Any, Callable
+from types import UnionType
+from typing import Any, Callable, Union, get_args, get_origin
 
 from ._itypes import FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
 from .errors import MessageHandlerNotFoundError, NotSupportedHandlerTypeError
@@ -152,3 +154,46 @@ def collect_listeners[
 # if name.startswith("_"):
 # continue
 # ...
+
+# def auto_collect(msg_type: type, dir: pathlib.Path):
+#     """
+#     scan through dir, looking for function / methods
+#     that contain subclass of msg_type as param of signature
+#     record its return type
+#     constrcut a anywise.pyi stub file along the way
+#     """
+
+
+def gather_commands(command_type: type) -> set[type]:
+    """
+    get a list of command from an annotation of command
+    if is a union of commands, collect each of them
+    else
+    """
+
+    command_types: set[type] = set()
+
+    if sys.version_info >= (3, 10):
+        union_meta = (UnionType, Union)
+    else:
+        union_meta = (Union,)
+
+    # TODO: recursive
+    if (origin := get_origin(command_type)) in union_meta:
+        union_commands = get_args(origin)
+        for command in union_commands:
+            command_types |= gather_commands(command)
+    else:
+        sub_commands = set(command_type.__subclasses__())
+        command_types.add(command_type)
+        command_types |= sub_commands
+    return command_types
+
+
+# def extract_gurad_target(func: Callable[..., Any]) -> set[type]:
+#     func_params = list(inspect.signature(func).parameters.values())
+#     if not func_params:
+#         return set()
+
+#     command_type = func_params[0].annotation
+#     return gather_commands(command_type)

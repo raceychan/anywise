@@ -23,7 +23,7 @@ It allows for asynchronous communication between components, enabling highly dec
 sequenceDiagram
     participant MS as Message Source
     participant D as Decoder
-    box Anywise Core
+    box Anywise
         participant CG as Command Guards
         participant CH as Command Handler
         participant EH as Event Handlers
@@ -36,8 +36,8 @@ sequenceDiagram
         MS->>D: Raw Message
         Note right of D: decode as command
         D->>CG: Command Message
-        Note right of CG: validate command
-        CG->>CH: Validated Command
+        Note right of CG: non-bussiness logic
+        CG->>CH: Command Message
         Note right of CH: handle command
         Note right of CH: mutate state
         CH->>EH: Publish Events
@@ -66,7 +66,7 @@ sequenceDiagram
 sequenceDiagram
     participant MS as Message Source
     participant D as Decoder
-    box Anywise Core
+    box Anywise
         participant EH as Event Handlers
         participant CG as Command Guards
         participant CH as Command Handler
@@ -76,12 +76,14 @@ sequenceDiagram
     MS->>D: Raw Message
     Note right of D: Decode as Event
     D->>EH: Event Message
-    Note right of EH: response with command
+    Note right of EH: react to event
     EH->>CG: Command Message
-    Note right of CG: validate command
-    CG->>CH: Validated Command
+    Note right of CG: non-business logic
+    CG->>CH: Command Message
     Note right of CH: Handle command
     Note right of CH: mutate state
     Note right of CH: emits event
     CH->>ES: Event-carried state transfer
 ```
+
+In this case, Message source is often a message queue, e.g. kafka

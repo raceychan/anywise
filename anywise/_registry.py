@@ -1,15 +1,14 @@
 import inspect
-import sys
 from collections import defaultdict
-from types import UnionType
-from typing import Any, Callable, Sequence, Union, get_args, get_origin, overload
+from dataclasses import dataclass
+from functools import partial
+from typing import Any, Callable, Literal, Sequence, Unpack, cast, overload
 
-from ididi import DependencyGraph, INode
+from ididi import DependencyGraph, INode, INodeConfig
 
 from ._itypes import (
     MISSING,
     FuncMeta,
-    GuardMapping,
     HandlerMapping,
     IGuard,
     ListenerMapping,
@@ -19,41 +18,16 @@ from ._itypes import (
 )
 from ._visitor import Target, collect_handlers, collect_listeners
 from .errors import MessageHandlerNotFoundError
-from .guard import BaseGuard, Guard, GuardFunc, PostHandle
+from .guard import Guard, GuardFunc, PostHandle
 
-# def auto_collect(msg_type: type, dir: pathlib.Path):
-#     """
-#     scan through dir, looking for function / methods
-#     that contain subclass of msg_type as param of signature
-#     record its return type
-#     constrcut a anywise.pyi stub file along the way
-#     """
+type GuardType = Literal["pre_handle", "post_handle", "both"]
+type GuardMapping = defaultdict[type, list[GuardMeta]]
 
 
-def gather_commands(command_type: type) -> set[type]:
-    """
-    get a list of command from an annotation of command
-    if is a union of commands, collect each of them
-    else
-
-    """
-    command_types: set[type] = set()
-
-    if sys.version_info >= (3, 10):
-        union_meta = (UnionType, Union)
-    else:
-        union_meta = (Union,)
-
-    # TODO: recursive
-    if (origin := get_origin(command_type)) in union_meta:
-        union_commands = get_args(origin)
-        for command in union_commands:
-            command_types |= gather_commands(command)
-    else:
-        sub_commands = set(command_type.__subclasses__())
-        command_types.add(command_type)
-        command_types |= sub_commands
-    return command_types
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GuardMeta:
+    guard_target: type
+    guard: IGuard | type[IGuard]
 
 
 class MessageRegistry[C, E]:
@@ -88,7 +62,8 @@ class MessageRegistry[C, E]:
 
         self.command_mapping: HandlerMapping[Any] = {}
         self.event_mapping: ListenerMapping[Any] = {}
-        self.message_guards: GuardMapping[Any] = defaultdict(list)
+
+        self.guard_mapping: GuardMapping = defaultdict(list)
 
     @overload
     def __call__[T](self, handler: type[T]) -> type[T]: ...
@@ -105,8 +80,25 @@ class MessageRegistry[C, E]:
     def graph(self) -> DependencyGraph:
         return self._graph
 
-    def factory[**P, R](self, factory: INode[P, R]) -> INode[P, R]:
-        self._graph.node(factory)
+    @overload
+    def factory(self, **config: Unpack[INodeConfig]) -> INode[..., Any]: ...
+
+    @overload
+    def factory[
+        **P, R
+    ](self, factory: INode[P, R] | None = None, **config: Unpack[INodeConfig]) -> INode[
+        P, R
+    ]: ...
+
+    def factory[
+        **P, R
+    ](self, factory: INode[P, R] | None = None, **config: Unpack[INodeConfig]) -> INode[
+        P, R
+    ]:
+        if factory is None:
+            return cast(INode[P, R], partial(self.factory, **config))
+
+        self._graph.node(**config)(factory)
         return factory
 
     def _register_commandhanlders(self, handler: Target):
@@ -160,7 +152,6 @@ class MessageRegistry[C, E]:
     @overload
     def register[**P, R](self, handler: Callable[P, R]) -> Callable[P, R]: ...
 
-    # accepts many handler
     def register(self, handler: Target):
         if self._command_base:
             try:
@@ -183,47 +174,44 @@ class MessageRegistry[C, E]:
         self._register_eventlisteners(handler)
         return handler
 
-    def extract_gurad_target(self, func: GuardFunc | PostHandle[Any]) -> set[type]:
+    def _extra_guardfunc_annotation(self, func: GuardFunc | PostHandle[Any]):
         func_params = list(inspect.signature(func).parameters.values())
-        if not func_params:
-            return set()
+        try:
+            cmd_type = func_params[0].annotation
+        except IndexError:
+            raise Exception
 
-        command_type = func_params[0].annotation
-        return gather_commands(command_type)
+        return cmd_type
 
     def pre_handle(self, func: GuardFunc) -> GuardFunc:
-        """
-        TODO?: we should transform gurad into funcmeta
-        """
-        target_commands = self.extract_gurad_target(func)
-        for cmdtype in target_commands:
-            self.message_guards[cmdtype].append(Guard(pre_handle=func))
+        target = self._extra_guardfunc_annotation(func)
+        meta = GuardMeta(guard_target=target, guard=Guard(pre_handle=func))
+        self.guard_mapping[meta.guard_target].append(meta)
         return func
 
     def post_handle[R](self, func: PostHandle[R]) -> PostHandle[R]:
-        for cmdtype in self.extract_gurad_target(func):
-            self.message_guards[cmdtype].append(Guard(post_handle=func))
+        target = self._extra_guardfunc_annotation(func)
+        meta = GuardMeta(guard_target=target, guard=Guard(post_handle=func))
+        self.guard_mapping[meta.guard_target].append(meta)
         return func
 
-    def add_guard(self, command_types: Sequence[type[C]], guard: IGuard) -> IGuard:
+    def add_guard(
+        self, command_types: Sequence[type[C]], guard: IGuard | type[IGuard]
+    ) -> IGuard | type[IGuard]:
         """
         a sequence of commands
         guard or a list of guards
         """
-        all_commands: set[type] = set(command_types)
 
-        for command in command_types:
-            all_commands |= gather_commands(command)
-
-        for c in all_commands:
-            self.message_guards[c].append(guard)
-
+        for target in command_types:
+            meta = GuardMeta(guard_target=target, guard=guard)
+            self.guard_mapping[target].append(meta)
         return guard
 
-    def guard_for(self, *commands: type[C]):
-        def receiver[T: BaseGuard](cls: type[T]) -> type[T]:
-            # TODO: resolve cls
-            self.add_guard(commands, cls)
-            return cls
+    # def guard_for(self, *commands: type[C]):
+    #     def receiver[T: BaseGuard](cls: type[T]) -> type[T]:
+    #         # TODO: resolve cls
+    #         self.add_guard(commands, cls)
+    #         return cls
 
-        return receiver
+    #     return receiver

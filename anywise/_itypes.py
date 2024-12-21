@@ -1,17 +1,26 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from types import MappingProxyType
-from typing import Any, Awaitable, Callable, Final, Literal, Protocol, TypeGuard
+from typing import (
+    Annotated,
+    Any,
+    Awaitable,
+    Callable,
+    Final,
+    Literal,
+    Mapping,
+    MutableMapping,
+    Protocol,
+    TypeGuard,
+)
 
 type HandlerMapping[Command] = dict[type[Command], "FuncMeta[Command]"]
 type ListenerMapping[Event] = dict[type[Event], list[FuncMeta[Event]]]
 type GuardMapping[Command] = defaultdict[type[Command], list[IGuard]]
 
-type GuardContext = dict[str, Any]
-type GuardFunc = Callable[[Any, GuardContext], Awaitable[Any]]
-type PostHandle[R] = Callable[[Any, GuardContext, R], Awaitable[R]]
-type CommandContext = dict[str, Any]
-type EventContext = MappingProxyType[str, Any]
+type IContext = MutableMapping[Any, Any]
+type GuardFunc = Callable[[Any, IContext], Awaitable[Any]]
+type PostHandle[R] = Callable[[Any, IContext, R], Awaitable[R]]
+type EventContext = Mapping[Any, Any]
 
 
 class IGuard(Protocol):
@@ -24,7 +33,7 @@ class IGuard(Protocol):
         self._next_guard = next_guard
         """
 
-    async def __call__(self, message: Any, context: GuardContext) -> Any: ...
+    async def __call__(self, message: Any, context: IContext) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -46,19 +55,26 @@ class MethodMeta[Message](FuncMeta[Message]):
     owner_type: type
 
 
-class Result[T, E]:
-    """
-    def divide(a: int, b: int) -> Result[int, ZeroDivisionError]:
-        if b == 0:
-            raise ZeroDivisionError
-        return a / b
-    """
+type Result[R, E] = Annotated[R, E]
+"""
+A helper type alias to represent a function that can return either a value or an error.
 
-    ok: T
-    err: E | None = None
+Example:
+---
+```py
+class UserNotFoundError(Exception): ...
 
-    def __iter__(self):
-        return iter((self.ok, self.err))
+
+class InvalidStateError(Exception): ...
+
+
+type SignupError = UserNotFoundError | InvalidStateError
+
+
+def signup_user(command: CreateUser) -> Result[User, SignupError]:
+    return user
+```
+"""
 
 
 class _Missed:

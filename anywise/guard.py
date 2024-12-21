@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ._itypes import GuardContext, GuardFunc, PostHandle
+from ._itypes import GuardFunc, IContext, PostHandle
 
 """
 class AuthContext(TypedDict):
@@ -67,7 +67,7 @@ class Guard:
         return self._next_guard
 
     def __repr__(self):
-        base = f"Guard("
+        base = f"{self.__class__.__name__}("
         if self.pre_handle:
             base += f"pre_handle={self.pre_handle}"
         if self.next_guard:
@@ -77,8 +77,7 @@ class Guard:
         base += ")"
         return base
 
-    async def __call__(self, message: Any, context: GuardContext) -> Any:
-        # we should accept handler here so we can add decorator to it
+    async def __call__(self, message: Any, context: IContext) -> Any:
         if self.pre_handle:
             await self.pre_handle(message, context)
 
@@ -141,12 +140,12 @@ class BaseGuard(ABC):
         self._next_guard = next_guard
 
     @abstractmethod
-    async def __call__(self, message: Any, context: GuardContext) -> Any:
+    async def __call__(self, message: Any, context: IContext) -> Any:
         """
         Override this method with similar logic to the following:
 
         ```py
-        async def __call__(self, message, context):
+        async def __call__(self, message: Any, context: IContext):
             # write your pre-handle logic
             response = await self.next_guard
             # write your post-handle logic

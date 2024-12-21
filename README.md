@@ -75,7 +75,7 @@ when a function is registered, anywise will can through its signature, if any pa
 
 when a class is registered, anywise will scan through its pulic methods, then repeat the steps to functions.
 
-### use `Guard` to intercept command handling.
+### use `Guard` to intercept command handling
 
 ```py
 from anywise import AnyWise, GuardRegistry, handler_registry

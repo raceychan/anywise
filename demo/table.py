@@ -26,6 +26,7 @@ class Todos(TableBase):
     id = sa.Column("id", sa.String, primary_key=True)
     title = sa.Column("title", sa.String, unique=False, index=True)
     content = sa.Column("content", sa.String, unique=False, index=False)
+    is_completed = sa.Column("is_completed", sa.Boolean, default=False)
 
 
 class Events(TableBase):
@@ -34,6 +35,7 @@ class Events(TableBase):
     event_type = sa.Column("event_type", sa.String, index=True)
     event_body = sa.Column("event_body", sa.JSON)
     entity_id = sa.Column("entity_id", sa.String, index=True)
+    timestamp = sa.Column("timestamp", sa.DateTime)
     version = sa.Column("version", sa.String, index=True)
     # consumed_at: sa.DateTime, nullable=True
 

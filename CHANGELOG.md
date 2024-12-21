@@ -20,5 +20,9 @@ now will build guards before send, now the order of anywise.include(guard_regist
 - update docs
 - improve command resolve logic
 
-### version 1.0.0
+## version 0.1.4
 
+- add dependency injection to guard
+- scoped send
+
+### version 1.0.0

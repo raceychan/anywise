@@ -1,6 +1,6 @@
 import pytest
 
-from anywise import Anywise, MessageRegistry, concurrent_publish, inject
+from anywise import Anywise, MessageRegistry, concurrent_publish, use
 from tests.conftest import (
     CreateUser,
     RemoveUser,
@@ -40,7 +40,7 @@ def user_service_factory(asynwise: Anywise) -> "UserService":
 async def update_user(
     cmd: UpdateUser,
     anywise: Anywise,
-    service: UserService = inject(user_service_factory),
+    service: UserService = use(user_service_factory),
 ) -> str:
     assert service.hello() == "hello"
     await anywise.publish(UserNameUpdated(cmd.new_name))
@@ -50,7 +50,7 @@ async def update_user(
 @user_message_registry
 async def react_to_event(
     event: UserCreated,
-    service: UserService = inject(user_service_factory),
+    service: UserService = use(user_service_factory),
 ) -> None:
     print(f"handling {event=}")
 
