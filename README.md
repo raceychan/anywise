@@ -53,12 +53,12 @@ registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
 # @registry is equivalent to registry.register(create_user)
 @registry 
 async def create_user(
-     command: CreateUser, 
-     anywise: Anywise, 
-     auth: UserService = use(user_service_factory)
+    command: CreateUser, 
+    anywise: Anywise, 
+    users: UserRepository=use(users_factory)
 ):
-     await auth.signup(command.username, command.user_email)
-     await anywise.publish(UserCreated(command.username, command.user_email))
+    await users.signup(command.username, command.user_email)
+    await anywise.publish(UserCreated(command.username, command.user_email))
 
 
 @registry
@@ -82,15 +82,15 @@ class UserService:
     def __init__(
         self, 
         email_sender: EmailSender,
-        auth_service: AuthService=use(auth_service_factory),
+        users: UserRepository=use(users_factory),
         anywise: Anywise
     ):
         self._email_sender = email_sender
-        self._auth_service = auth_service
+        self._users = users
         self._anywise = anywise
 
     async def create_user(self, command: CreateUser, anywise: Anywise):
-        await self._auth_service.signup_user(command.username, command.user_email)
+        await self._users.signup(command.username, command.user_email)
         await self._anywise.publish(UserCreated(command.username, command.user_email))
 
 
