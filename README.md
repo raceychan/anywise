@@ -26,38 +26,51 @@ pip install anywise
 
 ## Quck Start
 
-Anywise integrates [ididi](https://github.com/raceychan/ididi) for dependency injection.
-define your dependency after the message parameter, they will be resolved when you send a command or publish an event.
+Let start with defining messages:
 
 ```py
-from anywise import Anywise, handler_registry, inject
+from anywise import Anywise, MessageRegistry, use
 
 class UserCommand: ...
 class CreateUser(UserCommand): ...
 class UserEvent: ...
 class UserCreated(UserEvent): ...
+```
 
-registry = MessageRegistry(command_base=UserCommand, event_base= UserEvent)
+register command handler and event listeners.
 
-@registry
+```py
+registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
+
+
+@registry # this is equivalent to registry.register(create_user)
 async def create_user(
      command: CreateUser, 
      anywise: Anywise, 
-     service: UserService = inject(user_service_factory)
+     service: UserService = use(user_service_factory)
 ):
      await service.create_user(command.username, command.user_email)
      await anywise.publish(UserCreated(command.username, command.user_email))
+
 
 @registry
 async def notify_user(event: UserCreated, service: EmailSender):
      await service.send_greeting(command.user_email)
 
-# at your client code
+# you can also menually register many handler at once
 
-async def main():
-     anywise = AnyWise()
-     anywise.include(user_registry)
-     result = await anywise.send(CreateUser())
+registry.register_all(create_user, notify_user)
+```
+
+Example usage with fastapi
+
+```py
+from anywise import Anywise
+from anywise.integration.fastapi import FastWise
+
+@app.post("/users")
+async def signup(command: CreateUser, anywise: FastWise) -> User:
+    return await anywise.send(command)
 ```
 
 ## Tutorial
@@ -65,15 +78,26 @@ async def main():
 ### register command handler / event listeners with MessageRegistry
 
 ```py
+from ididi import MessageRegistry
+
 registry = MessageRegistry(UserCommand)
-registry(hanlder_func)
+
+registry.register(hanlder_func)
 ```
 
 use MessageRegistry to decorate / register a function or a class as handlers of a command.
 
-when a function is registered, anywise will can through its signature, if any param is annotated as a subclass of the base command type, it will be registered as a handler of the command.
+#### Command handler
 
-when a class is registered, anywise will scan through its pulic methods, then repeat the steps to functions.
+- function that declear a subclass of the command base in its signature will be treated as a handler to the command.
+
+- class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
+
+- if two handlers with same command are registered, only lastly registered one will be used.
+
+#### Event listeners
+
+same register rule, but each event can have multiple listeners
 
 ### use `Guard` to intercept command handling
 
@@ -82,31 +106,30 @@ from anywise import AnyWise, GuardRegistry, handler_registry
 
 user_registry = MessageRegistry(command_base=UserCommand)
 
-@user_registry
-async def handler_create(create_user: CreateUser, context: dict[str, ty.Any]):
-    assert context["processed_by"]
-    return "done"
+# in this case, `mark` will be called before `handler_update` or `handler_create` gets called.
 
-
-@user_registry
-async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
-    return "done"
-```
-
-#### Guard that guard for a base command will handle all subcommand of the base command
-
-```py
 @user_registry.pre_handle
 async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
     if not context.get("processed_by"):
         context["processed_by"] = ["1"]
     else:
         context["processed_by"].append("1")
+
+@user_registry
+async def handler_create(create_user: CreateUser, context: dict[str, ty.Any]):
+    assert context["processed_by"]
+    return "done"
+
+@user_registry
+async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
+    return "done"
+
+
 ```
 
-in this case, `mark` will be called before `handler_update` or `handler_create` gets called.
+#### Guard that guard for a base command will handle all subcommand of the base command
 
-a handler can also handle multiple command type
+A handler can handle multiple command type
 
 ```py
 @user_registry
@@ -150,16 +173,36 @@ user_registry.add_guard([UserCommand], LogginGuard(logger=logger))
 
 ## Features
 
-- builtin dependency injection
+- builtin dependency injection(powerd by [ididi](https://github.com/raceychan/ididi))
+    - Define your dependency after the message parameter, they will be resolved when you send a command or publish an event.
+    - For each handler that handles the initial message, a scope will be created to manage resources.
+    - Subsequent handlers will share the same scope.
+
 - handler guards
 - framework integration
 - remote handler
+
+## Terms and concepts
+
+- A `Message` is a pure data object that is used to carry data that is needed for our application to respond. Also known as data transfer object.
+
+- A `Message` class often contains no behavior(method), and is immutable.
+
+### Command, Query and Event
+
+- `Command` carries pre-define intend, each command should have a corresponding `handler` that will mutate state, in the context of DDD, each command will always trigger a behavior of an aggregate root.
+
+- `Query` is a subclass of Command, where it also carry pre-define intend, but instead of mutate state, it will be responded by a present state of the application.
+
+In other words, command and query corresponds to write and read.
+
+- `Event` carries a record of an interested domain-related activity, often captures the side effect caused by a `Command`. an `Event` can have zero to many `listener`s
 
 ## Current limitations
 
 - currently `Anywise.send` does not provide accurate typing information, but annotated as return `typing.Any`
 This have no runtime effect, but is a good to have feature.
-It is expected to be solved before anywise v1.0.0
+It will be solved before anywise v1.0.0
 
 ## FAQ
 

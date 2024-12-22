@@ -74,6 +74,7 @@ class MessageRegistry[C, E]:
     def __call__[
         **P, R
     ](self, handler: type[R] | Callable[P, R]) -> type[R] | Callable[P, R]:
+
         return self.register(handler)
 
     @property
@@ -153,27 +154,36 @@ class MessageRegistry[C, E]:
     def register[**P, R](self, handler: Callable[P, R]) -> Callable[P, R]: ...
 
     def register(self, handler: Target):
-        if self._command_base:
-            try:
-                command_mapping = collect_handlers(self._command_base, handler)
-            except MessageHandlerNotFoundError:
-                command_mapping = {}
+        """
+        a helper function to register a function handler, or method handlers within a class.
 
-            for msg_type, meta in command_mapping.items():
-                if isinstance(meta, MethodMeta):
-                    self._graph.node(ignore=msg_type)(meta.owner_type)
-                else:
-                    command_mapping[msg_type] = FuncMeta(
-                        message_type=msg_type,
-                        handler=meta.handler,
-                        is_async=meta.is_async,
-                        is_contexted=meta.is_contexted,
-                    )
-            self.command_mapping.update(command_mapping)
+        Usage
+        ---
 
-        if self._event_base:
-            self._register_eventlisteners(handler)
+        - register a class, method with subclass of command_base type will be registered
+
+        ```py
+        registry=MessageRegistry(command_base=Command, event_base=Event)
+
+        @registry
+        class UserService:
+            async def signup(self, command: CreateUser)
+        ```
+
+        - register a function, it should declear which command it handles in its signature.
+
+        ```py
+        @register
+        async def signup_user(command: CreateUser): ...
+        ```
+        """
+        self._register_commandhanlders(handler)
+        self._register_eventlisteners(handler)
         return handler
+
+    def register_all[**P, R](self, *handlers: Callable[P, R]) -> None:
+        for handler in handlers:
+            self.register(handler)
 
     def _extra_guardfunc_annotation(self, func: GuardFunc | PostHandle[Any]):
         func_params = list(inspect.signature(func).parameters.values())
