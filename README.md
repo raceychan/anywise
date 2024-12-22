@@ -45,6 +45,8 @@ class UserCreated(UserEvent): ...
 
 register command handler and event listeners.
 
+### Function-based handler/listener
+
 ```py
 # if only command_base is provided, then it will only register command handlers, same logic for event_base
 registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
@@ -68,6 +70,35 @@ async def notify_user(event: UserCreated, service: EmailSender):
 registry.register_all(create_user, notify_user)
 ```
 
+### Class based handler/listener
+
+You can also register a class, then each public method that declear command in its signature will be registered as handler, the class itself will be resolved at message handling time.
+
+- Declear dependency in class constructor.
+- If the registered class does not depends on, directly or indirectly, any resource, it will be reused across messages
+
+```py
+@registry 
+class UserService:
+    def __init__(
+        self, 
+        email_sender: EmailSender,
+        auth_service: AuthService=use(auth_service_factory),
+        anywise: Anywise
+    ):
+        self._email_sender = email_sender
+        self._auth_service = auth_service
+        self._anywise = anywise
+
+    async def create_user(self, command: CreateUser, anywise: Anywise):
+        await self._auth_service.signup_user(command.username, command.user_email)
+        await self._anywise.publish(UserCreated(command.username, command.user_email))
+
+
+    async def notify_user(self, event: UserCreated, service: EmailSender):
+        await self._email_sender.greet_user(command.user_email)
+```
+
 ### Example usage with fastapi
 
 ```py
@@ -83,6 +114,8 @@ async def signup(command: CreateUser, anywise: FastWise) -> User:
 
 ### register command handler / event listeners with MessageRegistry
 
+use `MessageRegistry` to decorate / register a function as a handler of a command.
+
 ```py
 from ididi import MessageRegistry
 
@@ -91,13 +124,28 @@ registry = MessageRegistry(UserCommand)
 registry.register(hanlder_func)
 ```
 
-use MessageRegistry to decorate / register a function or a class as handlers of a command.
+#### use `registry.factory` to declear how a dependency should be resolved
+
+```py
+@registry.factory
+async def conn(engine=use(engine_factory)) -> AsyncGenerator[AsyncConnection, None]:
+    async with engine.begin() as conn:
+        yield conn
+```
+
+- factory must declear return type
+- factory declear with generator/async generator would be considered as a `resource`
+- resource will be opened / closed automatically across message
+- declear `reuse=False` to config if the factory should be reused across handler/listeners.
+
+checkout [ididi-github](https://github.com/raceychan/ididi) for more details
 
 #### Command handler
 
 - function that declear a subclass of the command base in its signature will be treated as a handler to the command.
 
 ```py
+@registry
 async def signup(command: CreateUser)
 ```
 
@@ -196,6 +244,7 @@ user_registry.add_guard([UserCommand], LogginGuard(logger=logger))
 # or the LoggingGuard class, which will be dynamically injected during anywise.send
 user_registry.add_guard([UserCommand], LogginGuard)
 ```
+
 
 ## Features
 
