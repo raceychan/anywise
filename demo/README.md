@@ -9,9 +9,19 @@ we will create a simple todo app with the following features:
 - Mark a todo as done
 - List all todos
 
-Along the way, we will evolve our architecture, applying advanced concepts like domain events, event sourcing and CQRS
+Along the way, we will evolve our architecture, applying advanced concepts like
+
+- Choreography
+- Orchestration
+- Transtional OutBox
+- Domain events
+- event sourcing
+- CQRS
+
+etc.
 
 ## Getting started
 
 1. Clone the repository
-2. run `make demo`
+2. run `make demo` at project root
+3. checkout apidocs to `localhost:8000/api/v1/docs`

@@ -28,6 +28,12 @@ pip install anywise
 
 Let start with defining messages:
 
+you can define messages however you like, it just needs to be a class, our recommendations are:
+
+- `msgspec.Struct`
+- `pydantic.BaseModel`
+- `dataclasses.dataclass`
+
 ```py
 from anywise import Anywise, MessageRegistry, use
 
@@ -42,8 +48,8 @@ register command handler and event listeners.
 ```py
 registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
 
-
-@registry # this is equivalent to registry.register(create_user)
+# @registry is equivalent to registry.register(create_user)
+@registry 
 async def create_user(
      command: CreateUser, 
      anywise: Anywise, 
@@ -62,7 +68,7 @@ async def notify_user(event: UserCreated, service: EmailSender):
 registry.register_all(create_user, notify_user)
 ```
 
-Example usage with fastapi
+### Example usage with fastapi
 
 ```py
 from anywise import Anywise
@@ -97,12 +103,12 @@ use MessageRegistry to decorate / register a function or a class as handlers of 
 
 #### Event listeners
 
-same register rule, but each event can have multiple listeners
+- same register rule, but each event can have multiple listeners
 
 ### use `Guard` to intercept command handling
 
 ```py
-from anywise import AnyWise, GuardRegistry, handler_registry
+from anywise import AnyWise, MessageRegistry
 
 user_registry = MessageRegistry(command_base=UserCommand)
 
@@ -124,10 +130,7 @@ async def handler_create(create_user: CreateUser, context: dict[str, ty.Any]):
 async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
     return "done"
 
-
 ```
-
-#### Guard that guard for a base command will handle all subcommand of the base command
 
 A handler can handle multiple command type
 
@@ -139,13 +142,17 @@ async def handle_multi(command: CreateUser | UpdateUser, context: dict[str, ty.A
 
 in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
 
-#### Advanced user-defined Guard
+Guard that guards for a base command will handle all subcommand of the base command
 
-You might define a more advanced stateful guard by inheriting from BaseGuard
+#### Advanced class-based Guard
 
 Example:
 
+Inherit from `BaseGuard` to make a class-based command guard
+
 ```py
+from anywise import BaseGuard
+
 class LogginGuard(BaseGuard):
     _next_guard: GuardFunc
 
@@ -168,7 +175,11 @@ class LogginGuard(BaseGuard):
                 )
                 return response
 
+# you can add either an instance of LoggingGuard:
 user_registry.add_guard([UserCommand], LogginGuard(logger=logger))
+
+# or the LoggingGuard class, which will be dynamically injected during anywise.send
+user_registry.add_guard([UserCommand], LogginGuard)
 ```
 
 ## Features

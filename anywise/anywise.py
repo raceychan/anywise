@@ -78,6 +78,7 @@ class HandlerManager(InjectMixin):
         self._guard_mapping: GuardMapping = defaultdict(list)
 
         """
+        TODO: collect global command guard
         self._global_guard: list[IGuard]
 
         @user_registry.pre_handle
