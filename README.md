@@ -24,7 +24,7 @@ Documentation: On its way here...
 pip install anywise
 ```
 
-## Quck Start
+## Quick Start
 
 Let start with defining messages:
 
@@ -35,8 +35,6 @@ you can define messages however you like, it just needs to be a class, our recom
 - `dataclasses.dataclass`
 
 ```py
-from anywise import Anywise, MessageRegistry, use
-
 class UserCommand: ...
 class CreateUser(UserCommand): ...
 class UserEvent: ...
@@ -48,6 +46,7 @@ register command handler and event listeners.
 ### Function-based handler/listener
 
 ```py
+from anywise import Anywise, MessageRegistry, use
 # if only command_base is provided, then it will only register command handlers, same logic for event_base
 registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
 
@@ -56,15 +55,15 @@ registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
 async def create_user(
      command: CreateUser, 
      anywise: Anywise, 
-     service: UserService = use(user_service_factory)
+     auth: UserService = use(user_service_factory)
 ):
-     await service.create_user(command.username, command.user_email)
+     await auth.signup(command.username, command.user_email)
      await anywise.publish(UserCreated(command.username, command.user_email))
 
 
 @registry
-async def notify_user(event: UserCreated, service: EmailSender):
-     await service.send_greeting(command.user_email)
+async def notify_user(event: UserCreated, email: EmailSender):
+     await email.send_greeting(command.user_email)
 
 # you can also menually register many handler at once
 registry.register_all(create_user, notify_user)
