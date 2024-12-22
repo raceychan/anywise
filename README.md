@@ -46,6 +46,7 @@ class UserCreated(UserEvent): ...
 register command handler and event listeners.
 
 ```py
+# if only command_base is provided, then it will only register command handlers, same logic for event_base
 registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
 
 # @registry is equivalent to registry.register(create_user)
@@ -64,7 +65,6 @@ async def notify_user(event: UserCreated, service: EmailSender):
      await service.send_greeting(command.user_email)
 
 # you can also menually register many handler at once
-
 registry.register_all(create_user, notify_user)
 ```
 
@@ -97,13 +97,40 @@ use MessageRegistry to decorate / register a function or a class as handlers of 
 
 - function that declear a subclass of the command base in its signature will be treated as a handler to the command.
 
+```py
+async def signup(command: CreateUser)
+```
+
 - class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
 
 - if two handlers with same command are registered, only lastly registered one will be used.
 
+- command handler can declear a `context` parameter in its signature, if so, a mutable dict object will be passed as `context`, `context` is shared between guards and handler.
+
+```py
+context = {}
+await anywise.send(command, context)
+```
+
+- A handler can handle multiple command type
+
+```py
+@user_registry
+async def handle_multi(command: CreateUser | UpdateUser, context: dict[str, ty.Any]):
+    ...
+```
+
+in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
+
 #### Event listeners
 
 - same register rule, but each event can have multiple listeners
+- event listener can declear `context` in its signature, if so, a immutable `context` object will be shared between listeners.
+
+```py
+context = MappingProxy(dict())
+await anywise.publish(event, context)
+```
 
 ### use `Guard` to intercept command handling
 
@@ -113,7 +140,6 @@ from anywise import AnyWise, MessageRegistry
 user_registry = MessageRegistry(command_base=UserCommand)
 
 # in this case, `mark` will be called before `handler_update` or `handler_create` gets called.
-
 @user_registry.pre_handle
 async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
     if not context.get("processed_by"):
@@ -131,17 +157,6 @@ async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
     return "done"
 
 ```
-
-A handler can handle multiple command type
-
-```py
-@user_registry
-async def handle_multi(command: CreateUser | UpdateUser, context: dict[str, ty.Any]):
-    ...
-```
-
-in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
-
 Guard that guards for a base command will handle all subcommand of the base command
 
 #### Advanced class-based Guard
