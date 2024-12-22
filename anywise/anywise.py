@@ -67,7 +67,6 @@ class InjectMixin:
 
         if not meta.is_contexted:
             handler = context_wrapper(handler)
-
         return handler
 
 
@@ -96,8 +95,7 @@ class HandlerManager(InjectMixin):
             for target in drived_target:
                 self._guard_mapping[target].extend(guad_meta)
 
-    @lru_cache(maxsize=None)
-    async def _build_handler(
+    async def _chain_guards(
         self,
         msg_type: Any,
         handler: Callable[..., Any],
@@ -123,17 +121,14 @@ class HandlerManager(InjectMixin):
         guards[-1].chain_next(handler)
         return guards[0]
 
-    async def get_handler(self, msg_type: type, scope: AsyncScope):
-        if resolved_handler := self._resolved_handler.get(msg_type):
-            return resolved_handler
-
+    async def resolve_handler(self, msg_type: type, scope: AsyncScope):
         try:
             meta = self._handler_metas[msg_type]
         except KeyError:
             raise UnregisteredMessageError(msg_type)
 
         resolved_handler = await self._resolve_meta(meta, scope=scope)
-        guarded_handler = await self._build_handler(
+        guarded_handler = await self._chain_guards(
             msg_type, resolved_handler, scope=scope
         )
         self._resolved_handler[msg_type] = guarded_handler
@@ -159,9 +154,6 @@ class ListenerManager(InjectMixin):
     async def get_listener(
         self, msg_type: type, *, scope: AsyncScope
     ) -> EventListeners:
-        if resolved_listeners := self._resolved_listeners.get(msg_type):
-            return resolved_listeners
-
         try:
             listener_metas = self._listener_metas[msg_type]
         except KeyError:
@@ -231,10 +223,11 @@ class Anywise(InjectMixin):
     async def send(self, msg: object, *, context: IContext | None = None) -> Any:
         if context is None:
             context = {}
+
         scope_proxy = self._dg.use_scope(create_on_miss=True, as_async=True)
 
         async with scope_proxy as scope:
-            handler = await self._handler_manager.get_handler(type(msg), scope)
+            handler = await self._handler_manager.resolve_handler(type(msg), scope)
             return await self._sender(msg, context, handler)
 
     async def publish(self, msg: object, context: EventContext | None = None) -> None:

@@ -4,8 +4,9 @@ test:
 	uv run pytest tests/
 
 feat:
-	uv urn pytest tests/test_feat.py
+	uv run pytest tests/test_feat.py
 
+.PHONY: demo
 demo:
 	uv run python -m demo
 

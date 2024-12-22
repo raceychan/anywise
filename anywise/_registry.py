@@ -171,7 +171,8 @@ class MessageRegistry[C, E]:
                     )
             self.command_mapping.update(command_mapping)
 
-        self._register_eventlisteners(handler)
+        if self._event_base:
+            self._register_eventlisteners(handler)
         return handler
 
     def _extra_guardfunc_annotation(self, func: GuardFunc | PostHandle[Any]):

@@ -164,6 +164,12 @@ def collect_listeners[
 #     """
 
 
+def all_subclasses(cls: type) -> set[type]:
+    return set(cls.__subclasses__()).union(
+        *[all_subclasses(c) for c in cls.__subclasses__()]
+    )
+
+
 def gather_commands(command_type: type) -> set[type]:
     """
     get a list of command from an annotation of command
@@ -178,15 +184,13 @@ def gather_commands(command_type: type) -> set[type]:
     else:
         union_meta = (Union,)
 
-    # TODO: recursive
     if (origin := get_origin(command_type)) in union_meta:
         union_commands = get_args(origin)
         for command in union_commands:
             command_types |= gather_commands(command)
     else:
-        sub_commands = set(command_type.__subclasses__())
         command_types.add(command_type)
-        command_types |= sub_commands
+        command_types |= all_subclasses(command_type)
     return command_types
 
 

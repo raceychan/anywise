@@ -13,6 +13,19 @@ from .todo import registry
 todo_router = APIRouter()
 
 
+# class DB: ...
+
+
+# def getdb():
+#     db = DB()
+#     yield db
+
+
+# class Service:
+#     def __init__(self, db: DB = Depends(getdb)):
+#         self.db = db
+
+
 @todo_router.get("/todos")
 async def read_todos(anywise: FastWise) -> list[Todo]:
     res = await anywise.send(ListTodos())

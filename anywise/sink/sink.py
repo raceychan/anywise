@@ -32,8 +32,8 @@ class IEvent(ty.Protocol):
         "datacontenttype" : "text/xml",
         --- metas
 
-        "subject" : "123",
-        "id" : "A234-1234-1234",
+        "subject" : "123", # entity_id
+        "id" : "A234-1234-1234", # event_id
         "time" : "2018-04-05T17:31:00Z",
         "comexampleextension1" : "value",
         "comexampleothervalue" : 5,
