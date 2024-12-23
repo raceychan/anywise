@@ -1,6 +1,6 @@
 from asyncio import to_thread
 from collections import defaultdict
-from functools import lru_cache, partial
+from functools import partial
 from types import MappingProxyType, MethodType
 from typing import Any, Awaitable, Callable, cast
 
@@ -233,4 +233,4 @@ class Anywise(InjectMixin):
             resolved_listeners = await self._listener_manager.get_listener(
                 type(msg), scope=scope
             )
-            await self._publisher(msg, context, resolved_listeners)
+            return await self._publisher(msg, context, resolved_listeners)

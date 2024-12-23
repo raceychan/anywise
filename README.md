@@ -31,7 +31,7 @@ pip install anywise
 
 Let start with defining messages:
 
-you can define messages however you like, it just needs to be a class, our recommendations are:
+You can define messages however you like, it just needs to be a class, our recommendations are:
 
 - `msgspec.Struct`
 - `pydantic.BaseModel`
@@ -46,12 +46,11 @@ class UserEvent: ...
 class UserCreated(UserEvent): ...
 ```
 
-register command handler and event listeners.
+Next step, Register command handler and event listeners.
 
 ```py
 registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
 
-# @registry is equivalent to registry.register(create_user)
 @registry 
 async def create_user(
      command: CreateUser, 
@@ -83,29 +82,73 @@ async def signup(command: CreateUser, anywise: FastWise) -> User:
 
 ## Tutorial
 
-### register command handler / event listeners with MessageRegistry
+### Use MessageRegistry to decorate / register a function or a class as handlers of a command
 
 ```py
-from ididi import MessageRegistry
+from anywise import MessageRegistry
 
-registry = MessageRegistry(UserCommand)
+registry = MessageRegistry(command_base=UserCommand)
 
 registry.register(hanlder_func)
 ```
 
-use MessageRegistry to decorate / register a function or a class as handlers of a command.
-
 #### Command handler
 
-- function that declear a subclass of the command base in its signature will be treated as a handler to the command.
+a handler `h` for command `c` can be either a method or a function
 
-- class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
+- For fucntion handler, dependency will be injected into `h` the handler during `anywise.send(c)`
+- For method handler, dependency will be injected into its owner type during `anywise.send(c)`
 
-- if two handlers with same command are registered, only lastly registered one will be used.
+```py
+registry = MessageRegistry(command_base=UserEvent)
+
+@registry
+class UserService:
+    def __init__(self, users: UserRepository=use(user_repo_factory), anywise: Anywise):
+        self._users = users
+        self._anywise = anywise
+
+    async def create_user(self, command: CreateUser, context: Mapping[str, Any]):
+        await self._users.add(User(command.user_name, command.user_email))
+        await self._anywise.publish(UserCreated(**comand))
+```
+
+- Function/Method that declear a subclass of the command base in its signature will be treated as a handler to that command and its subcommand.
+
+- Class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
+
+- If two or more handlers that handle the same command are registered, only the lastly registered one will be used.
 
 #### Event listeners
 
 - same register rule, but each event can have multiple listeners
+- event listener should return None
+
+```py
+registry = MessageRegistry(event_base=UserEvent)
+@registry
+async def notify_user(event: UserCreated, context: Mapping[str, Any], email: EmailSender) -> None:
+    await email.greet_user(event.user_name, event.user_email)
+
+@registry
+async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService):
+    await payment.validte_user_payment(event.user_name, event.user_email)
+```
+
+### Strategy
+
+- Provide an async callble `SendStrategy` or `PublishStrategy` to change the default behavior of how anywise send or publish message
+- You might provide strategy like a class with dependencies and async def __call__ for more advanced usage.
+
+```py
+from anywise import Anywise, MessageRegistry, concurrent_publish, EventListeners
+
+anywise = Anywise(user_message_registry, publisher=concurrent_publish)
+
+# now all event listeners that listen to type(event) will be called concurrently
+await anywise.publish(event) 
+
+```
 
 ### Command Guard
 
@@ -163,21 +206,6 @@ async def handler_update(command: UpdateUser, context: dict[str, ty.Any]):
     return "done"
 
 ```
-<<<<<<< Updated upstream
-
-A handler can handle multiple command type
-
-```py
-@user_registry
-async def handle_multi(command: CreateUser | UpdateUser, context: dict[str, ty.Any]):
-    ...
-```
-
-in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
-
-Guard that guards for a base command will handle all subcommand of the base command
-=======
->>>>>>> Stashed changes
 
 #### class-based Guard
 

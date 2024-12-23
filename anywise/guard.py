@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ._itypes import GuardFunc, IContext, PostHandle
+from .errors import DunglingGuardError
 
 """
 class AuthContext(TypedDict):
@@ -81,13 +82,13 @@ class Guard:
         if self.pre_handle:
             await self.pre_handle(command, context)
 
-        if self._next_guard:
-            response = await self._next_guard(command, context)
-            if self.post_handle:
-                return await self.post_handle(command, context, response)
-            return response
+        if not self._next_guard:
+            raise DunglingGuardError(self)
 
-        raise Exception(f"no handler after {self}")
+        response = await self._next_guard(command, context)
+        if self.post_handle:
+            return await self.post_handle(command, context, response)
+        return response
 
     def chain_next(self, next_guard: GuardFunc, /) -> None:
         self._next_guard = next_guard
@@ -135,6 +136,13 @@ class BaseGuard(ABC):
     @property
     def next_guard(self) -> GuardFunc | None:
         return self._next_guard
+
+    def __repr__(self):
+        base = f"{self.__class__.__name__}("
+        if self.next_guard:
+            base += f"next_guard={self._next_guard}"
+        base += ")"
+        return base
 
     def chain_next(self, next_guard: GuardFunc, /) -> None:
         self._next_guard = next_guard
