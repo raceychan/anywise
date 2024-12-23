@@ -74,7 +74,6 @@ class HandlerManager(InjectMixin):
     def __init__(self, dg: DependencyGraph):
         super().__init__(dg)
         self._handler_metas: dict[type, FuncMeta[Any]] = {}
-        self._resolved_handler: dict[type, Callable[..., Any]] = {}
         self._guard_mapping: GuardMapping = defaultdict(list)
 
         """
@@ -103,18 +102,19 @@ class HandlerManager(InjectMixin):
         *,
         scope: AsyncScope,
     ):
-        guards: list[IGuard] = []
 
-        for meta in self._guard_mapping[msg_type]:
-            if isinstance(meta.guard, type):
-                guard = await scope.resolve(meta.guard)
-            else:
-                guard = meta.guard
-
-            guards.append(guard)
-
-        if not guards:
+        metas = self._guard_mapping[msg_type]
+        if not metas:
             return handler
+
+        guards: list[IGuard] = [
+            (
+                await scope.resolve(meta.guard)
+                if isinstance(meta.guard, type)
+                else meta.guard
+            )
+            for meta in metas
+        ]
 
         for i in range(len(guards) - 1):
             guards[i].chain_next(guards[i + 1])
@@ -132,7 +132,6 @@ class HandlerManager(InjectMixin):
         guarded_handler = await self._chain_guards(
             msg_type, resolved_handler, scope=scope
         )
-        self._resolved_handler[msg_type] = guarded_handler
         return guarded_handler
 
 
@@ -140,9 +139,6 @@ class ListenerManager(InjectMixin):
     def __init__(self, dg: DependencyGraph):
         super().__init__(dg)
         self._listener_metas: defaultdict[type, list[FuncMeta[Any]]] = defaultdict(list)
-        self._resolved_listeners: defaultdict[type, list[Callable[..., Any]]] = (
-            defaultdict(list)
-        )
 
     def include_listeners(self, event_mapping: ListenerMapping[Any]):
         listener_mapping = {
@@ -163,7 +159,6 @@ class ListenerManager(InjectMixin):
         resolved_listeners = [
             await self._resolve_meta(meta, scope=scope) for meta in listener_metas
         ]
-        self._resolved_listeners[msg_type].extend(resolved_listeners)
         return resolved_listeners
 
 
@@ -172,20 +167,19 @@ class Anywise(InjectMixin):
 
     ## Args:
 
-    - send_strategy: Callable[[Any, MutableMapping[Any, Any], CommandHandler], Any]
-        Example:
+    - send_strategy: `Callable[[Any, MutableMapping[Any, Any], CommandHandler], Any]`
 
         ```py
         async def sender(msg: Any, context: CommandContext, handler: CommandHandler) -> Any:
             await handler(msg, context)
         ```
 
-    - publish_strategy: Callable[[Any, Mapping[Any, Any], EventListeners], Awaitable[None]]
-        Example:
+    - publish_strategy: `Callable[[Any, Mapping[Any, Any], EventListeners], Awaitable[None]]`
 
         ```py
         async def publisher(msg: Any, context: Mapping[Any, Any], listeners: EventListeners)->None:
-            await asyncio.gather(*[listener(msg, context) for listener in listeners])
+            for listener in listeners:
+                await listener(msg, context)
         ```
     """
 
@@ -224,7 +218,6 @@ class Anywise(InjectMixin):
     async def send(self, msg: object, *, context: IContext | None = None) -> Any:
         if context is None:
             context = {}
-
         scope_proxy = self._dg.use_scope(create_on_miss=True, as_async=True)
 
         async with scope_proxy as scope:

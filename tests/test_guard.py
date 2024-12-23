@@ -17,13 +17,13 @@ class LogginGuard(BaseGuard):
         super().__init__()
         self._logger = logger
 
-    async def __call__(self, message: object, context: IContext):
+    async def __call__(self, command: object, context: IContext):
         if (request_id := context.get("request_id")) is None:
             context["request_id"] = request_id = str(uuid4())
 
         with logger.contextualize(request_id=request_id):
             try:
-                response = await self._next_guard(message, context)
+                response = await self._next_guard(command, context)
             except Exception as exc:
                 logger.error(exc)
             else:
@@ -33,7 +33,7 @@ class LogginGuard(BaseGuard):
                 return response
 
 
-user_registry.add_guard([UserCommand], LogginGuard)
+user_registry.add_guard(LogginGuard, targets=[UserCommand])
 
 
 class ITest(ty.TypedDict):
@@ -75,7 +75,7 @@ async def handler_update(update_user: UpdateUser, context: TimeContext):
 
 
 @user_registry.post_handle
-async def post(create_user: CreateUser, context: IContext, response: str) -> str:
+async def post[R](create_user: CreateUser, context: IContext, response: R) -> R:
     assert response in ("created", "updated")
     return response
 

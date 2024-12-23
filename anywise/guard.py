@@ -77,14 +77,14 @@ class Guard:
         base += ")"
         return base
 
-    async def __call__(self, message: Any, context: IContext) -> Any:
+    async def __call__(self, command: Any, context: IContext) -> Any:
         if self.pre_handle:
-            await self.pre_handle(message, context)
+            await self.pre_handle(command, context)
 
         if self._next_guard:
-            response = await self._next_guard(message, context)
+            response = await self._next_guard(command, context)
             if self.post_handle:
-                return await self.post_handle(message, context, response)
+                return await self.post_handle(command, context, response)
             return response
 
         raise Exception(f"no handler after {self}")
@@ -140,7 +140,7 @@ class BaseGuard(ABC):
         self._next_guard = next_guard
 
     @abstractmethod
-    async def __call__(self, message: Any, context: IContext) -> Any:
+    async def __call__(self, target: Any, context: IContext) -> Any:
         """
         Override this method with similar logic to the following:
 

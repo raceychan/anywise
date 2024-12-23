@@ -207,17 +207,12 @@ class MessageRegistry[C, E]:
         return func
 
     def add_guard(
-        self, command_types: Sequence[type[C]], guard: IGuard | type[IGuard]
-    ) -> IGuard | type[IGuard]:
-        """
-        a sequence of commands
-        guard or a list of guards
-        """
-
-        for target in command_types:
-            meta = GuardMeta(guard_target=target, guard=guard)
-            self.guard_mapping[target].append(meta)
-        return guard
+        self, *guards: IGuard | type[IGuard], targets: Sequence[type[C]]
+    ) -> None:
+        for guard in guards:
+            for target in targets:
+                meta = GuardMeta(guard_target=target, guard=guard)
+                self.guard_mapping[target].append(meta)
 
     # def guard_for(self, *commands: type[C]):
     #     def receiver[T: BaseGuard](cls: type[T]) -> type[T]:

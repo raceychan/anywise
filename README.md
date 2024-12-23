@@ -1,8 +1,8 @@
 # Anywise
 
-Anywise is a framework for decoupling the business logic of your application from infrastructures.
+Anywise is a framework designed to decouple the business logic of your application from its infrastructure, enabling you to use the same code to handle messages from various sources such as web APIs, message queues, AWS Lambda, and more.
 
-This allows you to use the same code to handle message from various message sources, web api, message queue, AWS lambda, etc.
+Despite being inspired by Hexagonal Architecture and Event-Driven Architecture, Anywise does not bind itself to any specific purpose.
 
 ---
 
@@ -14,9 +14,12 @@ Documentation: On its way here...
 
 ## Rationale
 
-1. promote best practices and enterprise architecture in python
-2. isolating bussiness logic from input ports, allowing one app for web api, kafka, flink, etc.
-3. let you write less code than other wise
+Anywise is designed and built to:
+
+1. promote best practices and enterprise architecture in python.
+2. isolating bussiness logic from input ports, encapsulate application core, maxmize reusability of logic, allowing one app for web api, kafka, flink, etc.
+3. avoid redundant scripts
+4. let you write less code than other wise
 
 ## Install
 
@@ -57,7 +60,6 @@ async def create_user(
 ):
      await service.create_user(command.username, command.user_email)
      await anywise.publish(UserCreated(command.username, command.user_email))
-
 
 @registry
 async def notify_user(event: UserCreated, service: EmailSender):
@@ -105,7 +107,37 @@ use MessageRegistry to decorate / register a function or a class as handlers of 
 
 - same register rule, but each event can have multiple listeners
 
-### use `Guard` to intercept command handling
+### Command Guard
+
+you might use Guard to intercept command handling
+
+It is recommended to
+
+- encapsulate non-business logic inside guards, such as logging, rate-limiting, etc.
+- store non-business related context info in a mutable `context`, such as `request-id`, `x-country`, etc.
+- use inheritance-hierarchy to assign targets for guads.
+
+#### Function-based Guard
+
+- use `MessageRegistry.pre_handle` to register a function that only gets called before the command is handled.
+
+```py
+@registry.pre_handle
+async def validate_command(command: UserCommand, context: dict[str, ty.Any]) -> None:
+    if not context["user"]:
+        raise InvalidAuthError
+```
+
+- use `MessageRegistry.post_handle` to register a function that only gets called after the command is handled
+
+```py
+@registry.post_handle
+async def log_result(command: UserCommand, context: dict[str, ty.Any], response: R) -> R:
+    logger.info(f"{command} is handled with {response=}")
+    return response
+```
+
+- Guard that guards for a base command will handle all subcommand of the base command
 
 ```py
 from anywise import AnyWise, MessageRegistry
@@ -122,15 +154,16 @@ async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
         context["processed_by"].append("1")
 
 @user_registry
-async def handler_create(create_user: CreateUser, context: dict[str, ty.Any]):
+async def handler_create(command: CreateUser, context: dict[str, ty.Any]):
     assert context["processed_by"]
     return "done"
 
 @user_registry
-async def handler_update(update_user: UpdateUser, context: dict[str, ty.Any]):
+async def handler_update(command: UpdateUser, context: dict[str, ty.Any]):
     return "done"
 
 ```
+<<<<<<< Updated upstream
 
 A handler can handle multiple command type
 
@@ -143,10 +176,10 @@ async def handle_multi(command: CreateUser | UpdateUser, context: dict[str, ty.A
 in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
 
 Guard that guards for a base command will handle all subcommand of the base command
+=======
+>>>>>>> Stashed changes
 
-#### Advanced class-based Guard
-
-Example:
+#### class-based Guard
 
 Inherit from `BaseGuard` to make a class-based command guard
 
@@ -160,26 +193,28 @@ class LogginGuard(BaseGuard):
         super().__init__()
         self._logger = logger
 
-    async def __call__(self, message: object, context: dict[str, object]):
+    async def __call__(self, command: Any, context: dict[str, object]):
         if (request_id := context.get("request_id")) is None:
             context["request_id"] = request_id = str(uuid4())
 
         with logger.contextualize(request_id=request_id):
             try:
-                response = await self._next_guard(message, context)
+                response = await self._next_guard(command, context)
             except Exception as exc:
                 logger.error(exc)
+                response =  ErrorResponse(command, context, self._next_guard)
             else:
                 logger.success(
                     f"Logging request: {request_id}, got response `{response}`"
                 )
+            finally:
                 return response
 
 # you can add either an instance of LoggingGuard:
-user_registry.add_guard([UserCommand], LogginGuard(logger=logger))
+user_registry.add_guard(LogginGuard(logger=logger), targets=[UserCommand])
 
 # or the LoggingGuard class, which will be dynamically injected during anywise.send
-user_registry.add_guard([UserCommand], LogginGuard)
+user_registry.add_guard(LogginGuard, targets=[UserCommand])
 ```
 
 ## Features
@@ -195,6 +230,8 @@ user_registry.add_guard([UserCommand], LogginGuard)
 
 ## Terms and concepts
 
+what do we mean when we use these words 
+
 - A `Message` is a pure data object that is used to carry data that is needed for our application to respond. Also known as data transfer object.
 
 - A `Message` class often contains no behavior(method), and is immutable.
@@ -209,11 +246,13 @@ In other words, command and query corresponds to write and read.
 
 - `Event` carries a record of an interested domain-related activity, often captures the side effect caused by a `Command`. an `Event` can have zero to many `listener`s
 
-## Current limitations
+## Current limitations and planning fix
 
 - currently `Anywise.send` does not provide accurate typing information, but annotated as return `typing.Any`
 This have no runtime effect, but is a good to have feature.
 It will be solved before anywise v1.0.0
+
+- currently if a handler needs to receive `context`, it must declear the context parameter with name `context`, in future it will be decleared as type.
 
 ## FAQ
 
