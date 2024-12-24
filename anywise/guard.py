@@ -50,50 +50,7 @@ async def get_current_user(aut_repo: AuthRepo, jwt_token: str) -> User:
 """
 
 
-class Guard:
-    def __init__(
-        self,
-        next_guard: GuardFunc | None = None,
-        /,
-        *,
-        pre_handle: GuardFunc | None = None,
-        post_handle: PostHandle[Any] | None = None,
-    ):
-        self._next_guard = next_guard
-        self.pre_handle = pre_handle
-        self.post_handle = post_handle
-
-    @property
-    def next_guard(self) -> GuardFunc | None:
-        return self._next_guard
-
-    def __repr__(self):
-        base = f"{self.__class__.__name__}("
-        if self.pre_handle:
-            base += f"pre_handle={self.pre_handle}"
-        if self.next_guard:
-            base += f"next_guard={self._next_guard}"
-        if self.post_handle:
-            base += f"post_handle={self.post_handle}"
-        base += ")"
-        return base
-
-    async def __call__(self, command: Any, context: IContext) -> Any:
-        if self.pre_handle:
-            await self.pre_handle(command, context)
-
-        if not self._next_guard:
-            raise DunglingGuardError(self)
-
-        response = await self._next_guard(command, context)
-        if self.post_handle:
-            return await self.post_handle(command, context, response)
-        return response
-
-    def chain_next(self, next_guard: GuardFunc, /) -> None:
-        self._next_guard = next_guard
-
-
+# TODO: should be parent class of Guard
 class BaseGuard(ABC):
     """
     An abstract class for advanced user-defined guard.
@@ -130,6 +87,8 @@ class BaseGuard(ABC):
     ```
     """
 
+    _next_guard: GuardFunc | None
+
     def __init__(self, next_guard: GuardFunc | None = None):
         self._next_guard = next_guard
 
@@ -161,3 +120,30 @@ class BaseGuard(ABC):
         ```
         """
         raise NotImplementedError
+
+
+# tristep Guard
+class Guard(BaseGuard):
+    def __init__(
+        self,
+        next_guard: GuardFunc | None = None,
+        /,
+        *,
+        pre_handle: GuardFunc | None = None,
+        post_handle: PostHandle[Any] | None = None,
+    ):
+        super().__init__(next_guard)
+        self.pre_handle = pre_handle
+        self.post_handle = post_handle
+
+    async def __call__(self, command: Any, context: IContext) -> Any:
+        if self.pre_handle:
+            await self.pre_handle(command, context)
+
+        if not self._next_guard:
+            raise DunglingGuardError(self)
+
+        response = await self._next_guard(command, context)
+        if self.post_handle:
+            return await self.post_handle(command, context, response)
+        return response

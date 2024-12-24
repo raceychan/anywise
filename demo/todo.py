@@ -1,13 +1,13 @@
 import typing as ty
-from collections import defaultdict
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
-from sqlalchemy.sql import insert, select
+from sqlalchemy.sql import insert
 
 from anywise import Anywise, MessageRegistry, use
+from anywise.events import EventStore
 
 from .message import CreateTodo, ListTodos, Todo, TodoCommand, TodoCreated, TodoEvent
-from .table import Events, Todos
+from .table import Todos
 
 # App layer
 
@@ -44,45 +44,6 @@ class TodoRepository:
             await conn.execute(stmt)
 
 
-def mapping_to_event(mapping: ty.Mapping[ty.Any, ty.Any]) -> TodoEvent:
-    body = mapping["event_body"]
-    event = TodoCreated(
-        aggregate_id=mapping["aggregate_id"],
-        title=body["title"],
-        content=body["content"],
-        timestamp=mapping["timestamp"],
-    )
-    return event
-
-
-class EventStore:
-    def __init__(self, engine: AsyncEngine = use(engine_factory)):
-        self._engine = engine
-
-    async def add(self, event: TodoEvent):
-        stmt = insert(Events).values(
-            id=event.id,
-            event_type=event.__class__.__name__,
-            event_body=event.body(),
-            aggregate_id=event.aggregate_id,
-            version=event.__class__.version,
-        )
-        async with self._engine.begin() as conn:
-            await conn.execute(stmt)
-
-    async def list_streams(self) -> defaultdict[str, list[TodoEvent]]:
-        stmt = select(Events)
-        async with self._engine.begin() as conn:
-            cursor = await conn.execute(stmt)
-            res = cursor.mappings().all()
-
-        grouped_events: defaultdict[str, list[TodoEvent]] = defaultdict(list)
-        for r in res:
-            e = mapping_to_event(r)
-            grouped_events[e.aggregate_id].append(e)
-        return grouped_events
-
-
 @registry
 class TodoService:
     def __init__(
@@ -91,8 +52,6 @@ class TodoService:
         repo: TodoRepository,
         es: EventStore,
     ):
-        logger.info(f"created {self}")
-
         self._repo = repo
         self._es = es
         self._aw = anywise
@@ -108,8 +67,9 @@ class TodoService:
         return command.id
 
     async def list_todos(self, _: ListTodos) -> list[Todo]:
-        grouped_events = await self._es.list_streams()
-        todos = [Todo.rebuild(events) for _, events in grouped_events.items()]
+        todos: list[Todo] = []
+        async for stream in self._es.event_streams():
+            todos.append(Todo.rebuild(stream))
         return todos
 
 

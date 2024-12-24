@@ -1,23 +1,7 @@
 import sqlalchemy as sa
-from sqlalchemy import orm as sa_orm
 from sqlalchemy.ext import asyncio as saio
-from sqlalchemy.sql import func
 
-
-def declarative(cls: type) -> type[sa_orm.DeclarativeBase]:
-    """
-    A more pythonic way to declare a sqlalchemy table
-    """
-
-    return sa_orm.declarative_base(cls=cls)
-
-
-@declarative
-class TableBase:
-    gmt_modified = sa.Column(
-        "gmt_modified", sa.DateTime, server_default=func.now(), onupdate=func.now()
-    )
-    gmt_created = sa.Column("gmt_created", sa.DateTime, server_default=func.now())
+from anywise.events.table import TableBase
 
 
 class Todos(TableBase):
@@ -27,17 +11,6 @@ class Todos(TableBase):
     title = sa.Column("title", sa.String, unique=False, index=True)
     content = sa.Column("content", sa.String, unique=False, index=False)
     is_completed = sa.Column("is_completed", sa.Boolean, default=False)
-
-
-class Events(TableBase):
-    __tablename__: str = "events"
-    id = sa.Column("id", sa.String, primary_key=True)
-    event_type = sa.Column("event_type", sa.String, index=True)
-    event_body = sa.Column("event_body", sa.JSON)
-    aggregate_id = sa.Column("aggregate_id", sa.String, index=True)
-    timestamp = sa.Column("timestamp", sa.DateTime)
-    version = sa.Column("version", sa.String, index=True)
-    # consumed_at: sa.DateTime, nullable=True
 
 
 async def create_tables(engine: saio.AsyncEngine):
