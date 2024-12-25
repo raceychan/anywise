@@ -96,8 +96,6 @@ registry = MessageRegistry(command_base=UserCommand)
 registry.register(hanlder_func)
 ```
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 #### use `registry.factory` to declear how a dependency should be resolved
 
 ```py
@@ -114,21 +112,13 @@ async def conn(engine=use(engine_factory)) -> AsyncGenerator[AsyncConnection, No
 
 checkout [ididi-github](https://github.com/raceychan/ididi) for more details
 
-=======
->>>>>>> version/0.1.5
-#### Command handler
-
-a handler `h` for command `c` can be either a method or a function
-=======
 #### Command handler
 
 a handler `h` for command `c` can be either a method or a function
 
 - For fucntion handler, dependency will be injected into `h` the handler during `anywise.send(c)`
 - For method handler, dependency will be injected into its owner type during `anywise.send(c)`
->>>>>>> refs/remotes/origin/master
 
-<<<<<<< HEAD
 ```py
 registry = MessageRegistry(command_base=UserEvent)
 
@@ -143,12 +133,10 @@ class UserService:
         await self._anywise.publish(UserCreated(**comand))
 ```
 
-<<<<<<< HEAD
 - class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
-=======
 - For fucntion handler, dependency will be injected into `h` the handler during `anywise.send(c)`
 - For method handler, dependency will be injected into its owner type during `anywise.send(c)`
->>>>>>> version/0.1.5
+
 
 ```py
 registry = MessageRegistry(command_base=UserEvent)
@@ -165,27 +153,15 @@ class UserService:
 ```
 
 - Function/Method that declear a subclass of the command base in its signature will be treated as a handler to that command and its subcommand.
-
 - Class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
-
 - If two or more handlers that handle the same command are registered, only the lastly registered one will be used.
-=======
 - Function/Method that declear a subclass of the command base in its signature will be treated as a handler to that command and its subcommand.
-
-- Class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
->>>>>>> refs/remotes/origin/master
-
-- If two or more handlers that handle the same command are registered, only the lastly registered one will be used.
 
 #### Event listeners
 
 - same register rule, but each event can have multiple listeners
-<<<<<<< HEAD
-<<<<<<< HEAD
 - event listener can declear `context` in its signature, if so, a immutable `context` object will be shared between listeners.
-=======
-- event listener should return None
->>>>>>> refs/remotes/origin/master
+
 
 ```py
 registry = MessageRegistry(event_base=UserEvent)
@@ -197,11 +173,9 @@ async def notify_user(event: UserCreated, context: Mapping[str, Any], email: Ema
 async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService):
     await payment.validte_user_payment(event.user_name, event.user_email)
 ```
-=======
-- event listener should return None
->>>>>>> version/0.1.5
 
-<<<<<<< HEAD
+- event listener should return None
+
 ```py
 registry = MessageRegistry(event_base=UserEvent)
 @registry
@@ -213,8 +187,7 @@ async def validate_payment(event: UserCreated, context: Mapping[str, Any], payme
     await payment.validte_user_payment(event.user_name, event.user_email)
 ```
 
-=======
->>>>>>> refs/remotes/origin/master
+
 ### Strategy
 
 - Provide an async callble `SendStrategy` or `PublishStrategy` to change the default behavior of how anywise send or publish message
@@ -286,21 +259,13 @@ async def handler_update(command: UpdateUser, context: dict[str, ty.Any]):
     return "done"
 
 ```
-<<<<<<< HEAD
-<<<<<<< HEAD
 Guard that guards for a base command will handle all subcommand of the base command
 
 #### Advanced class-based Guard
 
 Example:
-=======
 
 #### class-based Guard
->>>>>>> version/0.1.5
-=======
-
-#### class-based Guard
->>>>>>> refs/remotes/origin/master
 
 Inherit from `BaseGuard` to make a class-based command guard
 
