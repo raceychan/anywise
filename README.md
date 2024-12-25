@@ -133,48 +133,14 @@ class UserService:
         await self._anywise.publish(UserCreated(**comand))
 ```
 
-- class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
-- For fucntion handler, dependency will be injected into `h` the handler during `anywise.send(c)`
-- For method handler, dependency will be injected into its owner type during `anywise.send(c)`
-
-
-```py
-registry = MessageRegistry(command_base=UserEvent)
-
-@registry
-class UserService:
-    def __init__(self, users: UserRepository=use(user_repo_factory), anywise: Anywise):
-        self._users = users
-        self._anywise = anywise
-
-    async def create_user(self, command: CreateUser, context: Mapping[str, Any]):
-        await self._users.add(User(command.user_name, command.user_email))
-        await self._anywise.publish(UserCreated(**comand))
-```
-
 - Function/Method that declear a subclass of the command base in its signature will be treated as a handler to that command and its subcommand.
-- Class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
 - If two or more handlers that handle the same command are registered, only the lastly registered one will be used.
-- Function/Method that declear a subclass of the command base in its signature will be treated as a handler to that command and its subcommand.
 
 #### Event listeners
 
 - same register rule, but each event can have multiple listeners
 - event listener can declear `context` in its signature, if so, a immutable `context` object will be shared between listeners.
-
-
-```py
-registry = MessageRegistry(event_base=UserEvent)
-@registry
-async def notify_user(event: UserCreated, context: Mapping[str, Any], email: EmailSender) -> None:
-    await email.greet_user(event.user_name, event.user_email)
-
-@registry
-async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService):
-    await payment.validte_user_payment(event.user_name, event.user_email)
-```
-
-- event listener should return None
+- event handler is supposed to return `None`, if it returns a value, it will be ignored.
 
 ```py
 registry = MessageRegistry(event_base=UserEvent)
@@ -183,10 +149,9 @@ async def notify_user(event: UserCreated, context: Mapping[str, Any], email: Ema
     await email.greet_user(event.user_name, event.user_email)
 
 @registry
-async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService):
+async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService) -> None:
     await payment.validte_user_payment(event.user_name, event.user_email)
 ```
-
 
 ### Strategy
 
@@ -209,9 +174,9 @@ you might use Guard to intercept command handling
 
 It is recommended to
 
-- encapsulate non-business logic inside guards, such as logging, rate-limiting, etc.
-- store non-business related context info in a mutable `context`, such as `request-id`, `x-country`, etc.
-- use inheritance-hierarchy to assign targets for guads.
+- Encapsulate non-business logic inside guards, such as logging, rate-limiting, etc.
+- Store non-business related context info in a mutable `context`, such as `request-id`, `x-country`, etc.
+- Use inheritance-hierarchy to assign targets for guads.
 
 #### Function-based Guard
 
@@ -259,6 +224,7 @@ async def handler_update(command: UpdateUser, context: dict[str, ty.Any]):
     return "done"
 
 ```
+
 Guard that guards for a base command will handle all subcommand of the base command
 
 #### Advanced class-based Guard
