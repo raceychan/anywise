@@ -27,7 +27,7 @@ Anywise is designed and built to:
 pip install anywise
 ```
 
-## Quick Start
+## Quck Start
 
 Let start with defining messages:
 
@@ -38,6 +38,8 @@ You can define messages however you like, it just needs to be a class, our recom
 - `dataclasses.dataclass`
 
 ```py
+from anywise import Anywise, MessageRegistry, use
+
 class UserCommand: ...
 class CreateUser(UserCommand): ...
 class UserEvent: ...
@@ -49,54 +51,24 @@ Next step, Register command handler and event listeners.
 ### Function-based handler/listener
 
 ```py
-from anywise import Anywise, MessageRegistry, use
-# if only command_base is provided, then it will only register command handlers, same logic for event_base
 registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
 
 @registry 
 async def create_user(
-    command: CreateUser, 
-    anywise: Anywise, 
-    users: UserRepository=use(users_factory)
+     command: CreateUser, 
+     anywise: Anywise, 
+     service: UserService = use(user_service_factory)
 ):
     await users.signup(command.username, command.user_email)
     await anywise.publish(UserCreated(command.username, command.user_email))
 
 @registry
-async def notify_user(event: UserCreated, email: EmailSender):
-     await email.send_greeting(command.user_email)
+async def notify_user(event: UserCreated, service: EmailSender):
+     await service.send_greeting(command.user_email)
 
 # you can also menually register many handler at once
+
 registry.register_all(create_user, notify_user)
-```
-
-### Class based handler/listener
-
-You can also register a class, then each public method that declear command in its signature will be registered as handler, the class itself will be resolved at message handling time.
-
-- Declear dependency in class constructor.
-- If the registered class does not depends on, directly or indirectly, any resource, it will be reused across messages
-
-```py
-@registry 
-class UserService:
-    def __init__(
-        self, 
-        email_sender: EmailSender,
-        users: UserRepository=use(users_factory),
-        anywise: Anywise
-    ):
-        self._email_sender = email_sender
-        self._users = users
-        self._anywise = anywise
-
-    async def create_user(self, command: CreateUser, anywise: Anywise):
-        await self._users.signup(command.username, command.user_email)
-        await self._anywise.publish(UserCreated(command.username, command.user_email))
-
-
-    async def notify_user(self, event: UserCreated, service: EmailSender):
-        await self._email_sender.greet_user(command.user_email)
 ```
 
 ### Example usage with fastapi
@@ -125,6 +97,7 @@ registry.register(hanlder_func)
 ```
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 #### use `registry.factory` to declear how a dependency should be resolved
 
 ```py
@@ -146,13 +119,31 @@ checkout [ididi-github](https://github.com/raceychan/ididi) for more details
 #### Command handler
 
 a handler `h` for command `c` can be either a method or a function
+=======
+#### Command handler
+
+a handler `h` for command `c` can be either a method or a function
+
+- For fucntion handler, dependency will be injected into `h` the handler during `anywise.send(c)`
+- For method handler, dependency will be injected into its owner type during `anywise.send(c)`
+>>>>>>> refs/remotes/origin/master
 
 <<<<<<< HEAD
 ```py
+registry = MessageRegistry(command_base=UserEvent)
+
 @registry
-async def signup(command: CreateUser)
+class UserService:
+    def __init__(self, users: UserRepository=use(user_repo_factory), anywise: Anywise):
+        self._users = users
+        self._anywise = anywise
+
+    async def create_user(self, command: CreateUser, context: Mapping[str, Any]):
+        await self._users.add(User(command.user_name, command.user_email))
+        await self._anywise.publish(UserCreated(**comand))
 ```
 
+<<<<<<< HEAD
 - class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
 =======
 - For fucntion handler, dependency will be injected into `h` the handler during `anywise.send(c)`
@@ -178,37 +169,23 @@ class UserService:
 - Class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
 
 - If two or more handlers that handle the same command are registered, only the lastly registered one will be used.
+=======
+- Function/Method that declear a subclass of the command base in its signature will be treated as a handler to that command and its subcommand.
 
-- command handler can declear a `context` parameter in its signature, if so, a mutable dict object will be passed as `context`, `context` is shared between guards and handler.
+- Class that contains a series of methods that declear a subclass of the command base in its signature, each method will be treated as a handler to the corresponding command.
+>>>>>>> refs/remotes/origin/master
 
-```py
-context = {}
-await anywise.send(command, context)
-```
-
-- A handler can handle multiple command type
-
-```py
-@user_registry
-async def handle_multi(command: CreateUser | UpdateUser, context: dict[str, ty.Any]):
-    ...
-```
-
-in this case, `handle_multi` will handle either `CreateUser` or `UpdateUser`
+- If two or more handlers that handle the same command are registered, only the lastly registered one will be used.
 
 #### Event listeners
 
 - same register rule, but each event can have multiple listeners
 <<<<<<< HEAD
+<<<<<<< HEAD
 - event listener can declear `context` in its signature, if so, a immutable `context` object will be shared between listeners.
-
-```py
-context = MappingProxy(dict())
-await anywise.publish(event, context)
-```
 =======
 - event listener should return None
->>>>>>> version/0.1.5
+>>>>>>> refs/remotes/origin/master
 
 ```py
 registry = MessageRegistry(event_base=UserEvent)
@@ -220,7 +197,24 @@ async def notify_user(event: UserCreated, context: Mapping[str, Any], email: Ema
 async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService):
     await payment.validte_user_payment(event.user_name, event.user_email)
 ```
+=======
+- event listener should return None
+>>>>>>> version/0.1.5
 
+<<<<<<< HEAD
+```py
+registry = MessageRegistry(event_base=UserEvent)
+@registry
+async def notify_user(event: UserCreated, context: Mapping[str, Any], email: EmailSender) -> None:
+    await email.greet_user(event.user_name, event.user_email)
+
+@registry
+async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService):
+    await payment.validte_user_payment(event.user_name, event.user_email)
+```
+
+=======
+>>>>>>> refs/remotes/origin/master
 ### Strategy
 
 - Provide an async callble `SendStrategy` or `PublishStrategy` to change the default behavior of how anywise send or publish message
@@ -274,6 +268,7 @@ from anywise import AnyWise, MessageRegistry
 user_registry = MessageRegistry(command_base=UserCommand)
 
 # in this case, `mark` will be called before `handler_update` or `handler_create` gets called.
+
 @user_registry.pre_handle
 async def mark(command: UserCommand, context: dict[str, ty.Any]) -> None:
     if not context.get("processed_by"):
@@ -292,6 +287,7 @@ async def handler_update(command: UpdateUser, context: dict[str, ty.Any]):
 
 ```
 <<<<<<< HEAD
+<<<<<<< HEAD
 Guard that guards for a base command will handle all subcommand of the base command
 
 #### Advanced class-based Guard
@@ -301,6 +297,10 @@ Example:
 
 #### class-based Guard
 >>>>>>> version/0.1.5
+=======
+
+#### class-based Guard
+>>>>>>> refs/remotes/origin/master
 
 Inherit from `BaseGuard` to make a class-based command guard
 
@@ -337,7 +337,6 @@ user_registry.add_guard(LogginGuard(logger=logger), targets=[UserCommand])
 # or the LoggingGuard class, which will be dynamically injected during anywise.send
 user_registry.add_guard(LogginGuard, targets=[UserCommand])
 ```
-
 
 ## Features
 
