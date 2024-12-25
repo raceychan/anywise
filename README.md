@@ -12,15 +12,6 @@ Documentation: On its way here...
 
 ---
 
-## Rationale
-
-Anywise is designed and built to:
-
-1. promote best practices and enterprise architecture in python.
-2. isolating bussiness logic from input ports, encapsulate application core, maxmize reusability of logic, allowing one app for web api, kafka, flink, etc.
-3. avoid redundant scripts
-4. let you write less code than other wise
-
 ## Install
 
 ```py
@@ -30,12 +21,6 @@ pip install anywise
 ## Quck Start
 
 Let start with defining messages:
-
-You can define messages however you like, it just needs to be a class, our recommendations are:
-
-- `msgspec.Struct`
-- `pydantic.BaseModel`
-- `dataclasses.dataclass`
 
 ```py
 from anywise import Anywise, MessageRegistry, use
@@ -81,6 +66,8 @@ from anywise.integration.fastapi import FastWise
 async def signup(command: CreateUser, anywise: FastWise) -> User:
     return await anywise.send(command)
 ```
+
+
 
 ## Tutorial
 
@@ -279,6 +266,14 @@ user_registry.add_guard(LogginGuard, targets=[UserCommand])
 - handler guards
 - framework integration
 - remote handler
+
+## Rationale
+
+Anywise is designed and built to:
+
+1. promote best practices and enterprise architecture in python.
+2. isolating bussiness logic from input ports, encapsulate application core, maxmize reusability of logic, allowing one app for web api, kafka, flink, etc.
+3. let you write less code than other wise
 
 ## Terms and concepts
 
