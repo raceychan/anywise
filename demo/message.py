@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-from functools import singledispatch
-from typing import Sequence
+from functools import singledispatchmethod
+from typing import Sequence, Self
 from uuid import uuid4
 
 from anywise.events import Event
@@ -26,12 +26,22 @@ class CreateTodo(TodoCommand):
 
 
 @dataclass
+class RenameTodo(TodoCommand):
+    todo_id: str
+    title: str
+
+
+@dataclass
 class ListTodos(TodoCommand): ...
 
 
 class TodoCreated(TodoEvent):
     title: str
     content: str
+
+
+class TodoRetitled(TodoEvent):
+    title: str
 
 
 @dataclass
@@ -51,11 +61,16 @@ class Todo:
 
         return self
 
+    @singledispatchmethod
     @classmethod
-    @singledispatch
-    def apply(cls, event: TodoCreated) -> "Todo":
+    def apply(cls, event: TodoCreated) -> "Self":
         return cls(
             todo_id=event.aggregate_id,
             title=event.title,
             content=event.content,
         )
+
+    @apply.register
+    def _(self, event: TodoRetitled) -> "Self":
+        self.title = event.title
+        return self

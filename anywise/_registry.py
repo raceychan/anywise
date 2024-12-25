@@ -181,9 +181,24 @@ class MessageRegistry[C, E]:
         self._register_eventlisteners(handler)
         return handler
 
-    def register_all[**P, R](self, *handlers: Callable[P, R]) -> None:
+    def register_all[
+        **P, R
+    ](
+        self,
+        *handlers: Callable[P, R],
+        pre_hanldes: list[GuardFunc] | None = None,
+        post_handles: list[PostHandle[R]] | None = None,
+    ) -> None:
         for handler in handlers:
             self.register(handler)
+
+        if pre_hanldes:
+            for pre_handle in pre_hanldes:
+                self.pre_handle(pre_handle)
+
+        if post_handles:
+            for post_handle in post_handles:
+                self.post_handle(post_handle)
 
     def _extra_guardfunc_annotation(self, func: Callable[..., Any]) -> type:
         if isinstance(func, type):
@@ -237,11 +252,11 @@ class MessageRegistry[C, E]:
                 response = await handler
                 # do something after
         """
+        raise NotImplementedError
         target = self._extra_guardfunc_annotation(func_or_cls)
         if isinstance(func_or_cls, type):
             meta = GuardMeta(guard_target=target, guard=func_or_cls)
         else:
             # func_or_cls is a function, chain next guard by partial
             meta = GuardMeta(guard_target=target, guard=func_or_cls)
-
         return target

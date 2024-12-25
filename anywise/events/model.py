@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any, ClassVar, Final
+from typing import Any, ClassVar, Final, Protocol, TypedDict, cast
 from uuid import uuid4
 
 __EventTypeRegistry__: Final[dict[str, type]] = {}
@@ -14,7 +14,13 @@ def utc_now() -> str:
 
 
 def type_id(cls: type["Event"]) -> str:
-    return f"{cls.__module__}:{cls.__name__}:v{cls.__version__}"
+    """
+    generate a type_id based on event class
+
+    e.g.
+    "demo.domain.event:UserCreated"
+    """
+    return f"{cls.__module__}:{cls.__name__}"
 
 
 def all_subclasses(cls: type) -> set[type]:
@@ -42,33 +48,63 @@ def get_event_cls(type_id: str) -> type["Event"]:
 
 class UnregisteredEventError(Exception):
     def __init__(self, type_id: str):
-        _, name, _ = type_id.split(":")
+        _, name = type_id.split(":")
         super().__init__(f"event {name} is not registered")
+
+
+class IEvent(Protocol):
+    @property
+    def event_id(self) -> str: ...
+
+    @property
+    def aggregate_id(self) -> str: ...
+
+    @property
+    def timestamp(self) -> str: ...
+
+
+class NormalizedEvent(TypedDict):
+    # classfields
+    event_type: str
+    source: str
+    version: str
+
+    # base fields
+    event_id: str
+    aggregate_id: str
+    timestamp: str
+
+    # current only fields
+    event_body: dict[str, Any]
 
 
 try:
     from msgspec import Struct
-    from msgspec import field as msgspec_field
 except ImportError:
     pass
 else:
+    from msgspec import field as msgspec_field
 
     class Event(Struct, frozen=True, kw_only=True):
         __source__: ClassVar[str] = ""  # project name, like demo
         __version__: ClassVar[str] = "1"  # specversion
 
-        event_id: str = msgspec_field(default_factory=uuid_factory)
         aggregate_id: str
+        event_id: str = msgspec_field(default_factory=uuid_factory)
         timestamp: str = msgspec_field(default_factory=utc_now)
 
-        def to_dict(self) -> dict[str, Any]:
-            reserved_field = Event.__struct_fields__
-            all_fields: dict[str, Any] = {}
-            body = {}
-            for f in self.__struct_fields__:
-                if f not in reserved_field:
-                    body[f] = getattr(self, f)
-                else:
-                    all_fields[f] = getattr(self, f)
-            all_fields["event_body"] = body
-            return all_fields
+        def __table_mapping__(self) -> NormalizedEvent:
+            base_fields = Event.__struct_fields__
+            current_only_fields = self.__struct_fields__[: -len(base_fields)]
+
+            mapping = {f: getattr(self, f) for f in base_fields}
+            event_body = {f: getattr(self, f) for f in current_only_fields}
+
+            mapping["event_type"] = type_id(self.__class__)
+            mapping["version"] = self.__version__
+            mapping["source"] = self.__source__ or "demo"
+            mapping["event_body"] = event_body
+            return cast(NormalizedEvent, mapping)
+
+
+# TODO: pydantic version

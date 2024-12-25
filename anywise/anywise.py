@@ -164,7 +164,6 @@ class ListenerManager(InjectMixin):
 
 class Anywise(InjectMixin):
     """
-
     ## Args:
 
     - send_strategy: `Callable[[Any, MutableMapping[Any, Any], CommandHandler], Any]`

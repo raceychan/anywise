@@ -98,7 +98,7 @@ class BaseGuard(ABC):
 
     def __repr__(self):
         base = f"{self.__class__.__name__}("
-        if self.next_guard:
+        if self._next_guard:
             base += f"next_guard={self._next_guard}"
         base += ")"
         return base
@@ -106,23 +106,23 @@ class BaseGuard(ABC):
     def chain_next(self, next_guard: GuardFunc, /) -> None:
         self._next_guard = next_guard
 
-    @abstractmethod
-    async def __call__(self, target: Any, context: IContext) -> Any:
+    async def __call__(self, command: Any, context: IContext) -> Any:
         """
-        Override this method with similar logic to the following:
+        subclass of `BaseGuard` should override __call__ similar to following:
 
         ```py
         async def __call__(self, message: Any, context: IContext):
             # write your pre-handle logic
-            response = await self.next_guard
+            response = await super().__call__(message, context)
             # write your post-handle logic
             return response
         ```
         """
-        raise NotImplementedError
+        if not self._next_guard:
+            raise DunglingGuardError(self)
+        return await self._next_guard(command, context)
 
 
-# tristep Guard
 class Guard(BaseGuard):
     def __init__(
         self,

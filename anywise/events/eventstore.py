@@ -27,15 +27,32 @@ class EventStore:
         stmt = select(Events)
         async with self._engine.begin() as conn:
             cursor = await conn.stream(stmt)
-            async for row in cursor:
-                mapping = row._mapping
-                yield mapping_to_event(mapping)
+            async for row in cursor.mappings():
+                yield mapping_to_event(row)
 
-    async def event_streams(self) -> AsyncGenerator[list[Event], None]:
+    async def all_event_streams(self) -> AsyncGenerator[list[Event], None]:
         grouped = defaultdict[str, list[Event]](list)
         current_id: str = ""
         async for e in self.list_all_events():
             if current_id and current_id != e.aggregate_id:
                 yield grouped[current_id]
+                del grouped[current_id]  # Free memory for the yielded group
             current_id = e.aggregate_id
             grouped[e.aggregate_id].append(e)
+
+        # Yield the final group after the loop
+        if current_id:
+            yield grouped[current_id]
+
+    async def event_stream(
+        self, aggregate_id: str, version: str = "1"
+    ) -> list[Event] | None:
+        stmt = select(Events).where(
+            Events.aggregate_id == aggregate_id and Events.version == version
+        )
+        async with self._engine.begin() as conn:
+            cursor = await conn.execute(stmt)
+            mapping = cursor.mappings().all()
+            if not mapping:
+                return None
+            return [mapping_to_event(row) for row in mapping]

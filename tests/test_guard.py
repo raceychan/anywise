@@ -2,7 +2,7 @@ import typing as ty
 
 from loguru import logger
 
-from anywise import Anywise, BaseGuard, GuardFunc, IContext, MessageRegistry
+from anywise import Anywise, BaseGuard, IContext, MessageRegistry
 from tests.conftest import CreateUser, UpdateUser, UserCommand
 
 user_registry = MessageRegistry(command_base=UserCommand)
@@ -11,7 +11,6 @@ from uuid import uuid4
 
 
 class LogginGuard(BaseGuard):
-    _next_guard: GuardFunc
 
     def __init__(self):
         super().__init__()
@@ -23,7 +22,7 @@ class LogginGuard(BaseGuard):
 
         with logger.contextualize(request_id=request_id):
             try:
-                response = await self._next_guard(command, context)
+                response = await super().__call__(command, context)
             except Exception as exc:
                 logger.error(exc)
             else:
@@ -78,8 +77,6 @@ async def handler_update(update_user: UpdateUser, context: TimeContext):
 async def post[R](create_user: CreateUser, context: IContext, response: R) -> R:
     assert response in ("created", "updated")
     return response
-
-
 
 
 async def test_guard():

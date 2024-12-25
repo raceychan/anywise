@@ -5,9 +5,10 @@ from sqlalchemy import orm as sa_orm
 from sqlalchemy.ext import asyncio as saio
 from sqlalchemy.sql import func
 
-from .model import Event, get_event_cls, type_id
+from .model import Event, NormalizedEvent, get_event_cls
 
 TABLE_RESERVED_VARS: set[str] = {
+    "id",  # primary key
     "version",
     "source",
     "event_type",
@@ -15,10 +16,7 @@ TABLE_RESERVED_VARS: set[str] = {
     "gmt_created",
     "gmt_modified",
 }
-"Values that exist in event table but no needed for event model"
-
-RENAME: dict[str, str] = {"id": "event_id"}
-"Map column name to even model field name, if they are different."
+"Values that exist in event table but should be ignored to rebuild the event model."
 
 
 def declarative(cls: type) -> type[sa_orm.DeclarativeBase]:
@@ -40,17 +38,25 @@ class TableBase:
 
 class Events(TableBase):
     __tablename__: str = "events"
-    id = sa.Column("id", sa.String, primary_key=True)
-    event_type = sa.Column("event_type", sa.String, index=True)
+    __table_args__: tuple[Any] = (
+        sa.Index("idx_events_aggregate_id_version", "aggregate_id", "version"),
+    )
+
+    id = sa.Column("id", sa.Integer, primary_key=True, autoincrement=True)
+    event_id = sa.Column(
+        "event_id", sa.String, index=False, nullable=False, unique=True
+    )
+    event_type = sa.Column("event_type", sa.String)
     event_body = sa.Column("event_body", sa.JSON)
-    source = sa.Column("source", sa.String)
-    aggregate_id = sa.Column("aggregate_id", sa.String, index=True)
+    source = sa.Column("source", sa.String, nullable=False)
+    aggregate_id = sa.Column("aggregate_id", sa.String, index=True, nullable=False)
     timestamp = sa.Column("timestamp", sa.String)
-    version = sa.Column("version", sa.String, index=True)
+    version = sa.Column("version", sa.String)
 
 
-class OutBoxEvents(Events):
-    consumed_at = sa.Column(sa.DateTime, nullable=True)
+# class OutBoxEvents(Events):
+#     __tablename__: str = "outbox_events"
+#     consumed_at = sa.Column(sa.DateTime, nullable=True)
 
 
 async def create_tables(engine: saio.AsyncEngine):
@@ -58,31 +64,13 @@ async def create_tables(engine: saio.AsyncEngine):
         await conn.run_sync(TableBase.metadata.create_all)
 
 
-def event_to_mapping(event: Event) -> dict[str, Any]:
-    mapping: dict[str, Any] = {}
-    mapping["event_type"] = type_id(event.__class__)
-    mapping["version"] = event.__version__
-    mapping["source"] = event.__source__ or "demo"
-
-    reserved_field = Event.__struct_fields__
-    body = {}
-    for f in event.__struct_fields__:
-        if f not in reserved_field:
-            body[f] = getattr(event, f)
-        else:
-            mapping[f] = getattr(event, f)
-    mapping["event_body"] = body
-    mapping["id"] = mapping.pop("event_id")
-    return mapping
+def event_to_mapping(event: Event) -> NormalizedEvent:
+    return event.__table_mapping__()
 
 
 def mapping_to_event(row_mapping: Mapping[Any, Any]) -> Event:
     type_id = row_mapping["event_type"]
     event_cls = get_event_cls(type_id)
-    mapping = {
-        RENAME.get(k, k): v
-        for k, v in row_mapping.items()
-        if k not in TABLE_RESERVED_VARS
-    }
+    mapping = {k: v for k, v in row_mapping.items() if k not in TABLE_RESERVED_VARS}
     body = row_mapping["event_body"]
     return event_cls(**mapping, **body)

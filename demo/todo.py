@@ -1,12 +1,21 @@
 import typing as ty
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
-from sqlalchemy.sql import insert
+from sqlalchemy.sql import insert, select, update
 
 from anywise import Anywise, MessageRegistry, use
 from anywise.events import EventStore
 
-from .message import CreateTodo, ListTodos, Todo, TodoCommand, TodoCreated, TodoEvent
+from .message import (
+    CreateTodo,
+    ListTodos,
+    RenameTodo,
+    Todo,
+    TodoCommand,
+    TodoCreated,
+    TodoEvent,
+    TodoRetitled,
+)
 from .table import Todos
 
 # App layer
@@ -43,6 +52,18 @@ class TodoRepository:
         async with self._engine.begin() as conn:
             await conn.execute(stmt)
 
+    async def get(self, todo_id: str) -> Todo | None:
+        stmt = select(Todos).where(Todos.id == todo_id)
+        async with self._engine.begin() as conn:
+            cursor = await conn.execute(stmt)
+            mapping = cursor.mappings().one_or_none()
+
+        if mapping:
+            return Todo(**mapping)
+        return None
+
+    async def retitle(self, todo_id: str, title: str) -> None: ...
+
 
 @registry
 class TodoService:
@@ -66,9 +87,21 @@ class TodoService:
         await self._aw.publish(event)
         return command.id
 
+    async def rename_todo(self, command: RenameTodo):
+        event = TodoRetitled(title=command.title, aggregate_id=command.todo_id)
+        todo = await self._repo.get(command.todo_id)
+        if not todo:
+            raise KeyError(f"todo with {command.todo_id=} not found")
+        todo.apply(event)
+
+        # TODO: make these three a transaction
+        await self._repo.retitle(todo.todo_id, todo.title)
+        await self._es.add(event)
+        await self._aw.publish(event)
+
     async def list_todos(self, _: ListTodos) -> list[Todo]:
         todos: list[Todo] = []
-        async for stream in self._es.event_streams():
+        async for stream in self._es.all_event_streams():
             todos.append(Todo.rebuild(stream))
         return todos
 
