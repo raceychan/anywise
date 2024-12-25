@@ -1,10 +1,14 @@
 .PHONY: test
-
 test:
 	uv run pytest tests/
 
+.PHONY: feat
 feat:
 	uv run pytest tests/test_feat.py
+
+.PHONY: cov
+cov:
+	uv run pytest tests/ --cov=anywise --cov-report term-missing 
 
 .PHONY: demo
 demo:

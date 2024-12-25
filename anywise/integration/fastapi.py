@@ -7,7 +7,10 @@ from ..anywise import Anywise
 
 
 def get_anywise(r: Request) -> Anywise:
-    anywise = r.scope["state"]["anywise"]
+    try:
+        anywise = r.scope["state"]["anywise"]
+    except KeyError:
+        raise
     return anywise
 
 
@@ -46,19 +49,20 @@ class CreateUser(UserCommand):
 
 @dataclass
 class UpdateUser(UserCommand):
-    entity_id: str  # Field(alias="user_id")
-
-    __source_config__ = FastAPISourceConfig(
-        path="/users/{entity_id}", http_method="PATCH"
-    )
     """
-    converts this to 
+    converts this to
     router = APIRouter()
 
     @router.patch("/users/{entity_id}")
     async def update_user(command: UpdateUser, anywise: AnyWise):
         await anywise.send(command)
     """
+
+    __source_config__ = FastAPISourceConfig(
+        path="/users/{entity_id}", http_method="PATCH"
+    )
+
+    entity_id: str  # Field(alias="user_id")
 
 
 def autoroute(message: FastAPICommand):

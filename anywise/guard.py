@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ._itypes import GuardFunc, IContext, PostHandle
+from .errors import DunglingGuardError
 
 """
 class AuthContext(TypedDict):
@@ -49,50 +50,7 @@ async def get_current_user(aut_repo: AuthRepo, jwt_token: str) -> User:
 """
 
 
-class Guard:
-    def __init__(
-        self,
-        next_guard: GuardFunc | None = None,
-        /,
-        *,
-        pre_handle: GuardFunc | None = None,
-        post_handle: PostHandle[Any] | None = None,
-    ):
-        self._next_guard = next_guard
-        self.pre_handle = pre_handle
-        self.post_handle = post_handle
-
-    @property
-    def next_guard(self) -> GuardFunc | None:
-        return self._next_guard
-
-    def __repr__(self):
-        base = f"{self.__class__.__name__}("
-        if self.pre_handle:
-            base += f"pre_handle={self.pre_handle}"
-        if self.next_guard:
-            base += f"next_guard={self._next_guard}"
-        if self.post_handle:
-            base += f"post_handle={self.post_handle}"
-        base += ")"
-        return base
-
-    async def __call__(self, message: Any, context: IContext) -> Any:
-        if self.pre_handle:
-            await self.pre_handle(message, context)
-
-        if self._next_guard:
-            response = await self._next_guard(message, context)
-            if self.post_handle:
-                return await self.post_handle(message, context, response)
-            return response
-
-        raise Exception(f"no handler after {self}")
-
-    def chain_next(self, next_guard: GuardFunc, /) -> None:
-        self._next_guard = next_guard
-
-
+# TODO: should be parent class of Guard
 class BaseGuard(ABC):
     """
     An abstract class for advanced user-defined guard.
@@ -129,6 +87,8 @@ class BaseGuard(ABC):
     ```
     """
 
+    _next_guard: GuardFunc | None
+
     def __init__(self, next_guard: GuardFunc | None = None):
         self._next_guard = next_guard
 
@@ -136,20 +96,54 @@ class BaseGuard(ABC):
     def next_guard(self) -> GuardFunc | None:
         return self._next_guard
 
+    def __repr__(self):
+        base = f"{self.__class__.__name__}("
+        if self._next_guard:
+            base += f"next_guard={self._next_guard}"
+        base += ")"
+        return base
+
     def chain_next(self, next_guard: GuardFunc, /) -> None:
         self._next_guard = next_guard
 
-    @abstractmethod
-    async def __call__(self, message: Any, context: IContext) -> Any:
+    async def __call__(self, command: Any, context: IContext) -> Any:
         """
-        Override this method with similar logic to the following:
+        subclass of `BaseGuard` should override __call__ similar to following:
 
         ```py
         async def __call__(self, message: Any, context: IContext):
             # write your pre-handle logic
-            response = await self.next_guard
+            response = await super().__call__(message, context)
             # write your post-handle logic
             return response
         ```
         """
-        raise NotImplementedError
+        if not self._next_guard:
+            raise DunglingGuardError(self)
+        return await self._next_guard(command, context)
+
+
+class Guard(BaseGuard):
+    def __init__(
+        self,
+        next_guard: GuardFunc | None = None,
+        /,
+        *,
+        pre_handle: GuardFunc | None = None,
+        post_handle: PostHandle[Any] | None = None,
+    ):
+        super().__init__(next_guard)
+        self.pre_handle = pre_handle
+        self.post_handle = post_handle
+
+    async def __call__(self, command: Any, context: IContext) -> Any:
+        if self.pre_handle:
+            await self.pre_handle(command, context)
+
+        if not self._next_guard:
+            raise DunglingGuardError(self)
+
+        response = await self._next_guard(command, context)
+        if self.post_handle:
+            return await self.post_handle(command, context, response)
+        return response

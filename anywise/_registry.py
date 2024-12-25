@@ -181,17 +181,38 @@ class MessageRegistry[C, E]:
         self._register_eventlisteners(handler)
         return handler
 
-    def register_all[**P, R](self, *handlers: Callable[P, R]) -> None:
+    def register_all[
+        **P, R
+    ](
+        self,
+        *handlers: Callable[P, R],
+        pre_hanldes: list[GuardFunc] | None = None,
+        post_handles: list[PostHandle[R]] | None = None,
+    ) -> None:
         for handler in handlers:
             self.register(handler)
 
-    def _extra_guardfunc_annotation(self, func: GuardFunc | PostHandle[Any]):
-        func_params = list(inspect.signature(func).parameters.values())
+        if pre_hanldes:
+            for pre_handle in pre_hanldes:
+                self.pre_handle(pre_handle)
+
+        if post_handles:
+            for post_handle in post_handles:
+                self.post_handle(post_handle)
+
+    def _extra_guardfunc_annotation(self, func: Callable[..., Any]) -> type:
+        if isinstance(func, type):
+            f = func.__call__
+            command_index = 1
+        else:
+            f = func
+            command_index = 0
+
+        func_params = list(inspect.signature(f).parameters.values())
         try:
-            cmd_type = func_params[0].annotation
+            cmd_type = func_params[command_index].annotation
         except IndexError:
             raise Exception
-
         return cmd_type
 
     def pre_handle(self, func: GuardFunc) -> GuardFunc:
@@ -207,22 +228,35 @@ class MessageRegistry[C, E]:
         return func
 
     def add_guard(
-        self, command_types: Sequence[type[C]], guard: IGuard | type[IGuard]
-    ) -> IGuard | type[IGuard]:
+        self, *guards: IGuard | type[IGuard], targets: Sequence[type[C]]
+    ) -> None:
+        for guard in guards:
+            for target in targets:
+                meta = GuardMeta(guard_target=target, guard=guard)
+                self.guard_mapping[target].append(meta)
+
+    def guard[
+        **P, R
+    ](self, func_or_cls: IGuard | type[IGuard]) -> IGuard | type[IGuard]:
         """
-        a sequence of commands
-        guard or a list of guards
+        @registry.guard
+        async def guard_func(command: Command, context: IContext, handler):
+            # do something before
+            response = await handler
+            # do something after
+
+        @registry.guard
+        class LoggingGuard(BaseGuard):
+            async def __call__(self, command: Command, context: IContext):
+                # do something before
+                response = await handler
+                # do something after
         """
-
-        for target in command_types:
-            meta = GuardMeta(guard_target=target, guard=guard)
-            self.guard_mapping[target].append(meta)
-        return guard
-
-    # def guard_for(self, *commands: type[C]):
-    #     def receiver[T: BaseGuard](cls: type[T]) -> type[T]:
-    #         # TODO: resolve cls
-    #         self.add_guard(commands, cls)
-    #         return cls
-
-    #     return receiver
+        raise NotImplementedError
+        target = self._extra_guardfunc_annotation(func_or_cls)
+        if isinstance(func_or_cls, type):
+            meta = GuardMeta(guard_target=target, guard=func_or_cls)
+        else:
+            # func_or_cls is a function, chain next guard by partial
+            meta = GuardMeta(guard_target=target, guard=func_or_cls)
+        return target

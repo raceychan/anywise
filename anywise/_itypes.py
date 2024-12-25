@@ -33,7 +33,7 @@ class IGuard(Protocol):
         self._next_guard = next_guard
         """
 
-    async def __call__(self, message: Any, context: IContext) -> Any: ...
+    async def __call__(self, command: Any, context: IContext) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
