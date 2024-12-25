@@ -34,21 +34,21 @@ class EventStore:
         grouped = defaultdict[str, list[Event]](list)
         current_id: str = ""
         async for e in self.list_all_events():
-            if current_id and current_id != e.aggregate_id:
+            if current_id and current_id != e.entity_id:
                 yield grouped[current_id]
                 del grouped[current_id]  # Free memory for the yielded group
-            current_id = e.aggregate_id
-            grouped[e.aggregate_id].append(e)
+            current_id = e.entity_id
+            grouped[e.entity_id].append(e)
 
         # Yield the final group after the loop
         if current_id:
             yield grouped[current_id]
 
     async def event_stream(
-        self, aggregate_id: str, version: str = "1"
+        self, entity_id: str, version: str = "1"
     ) -> list[Event] | None:
         stmt = select(Events).where(
-            Events.aggregate_id == aggregate_id and Events.version == version
+            Events.entity_id == entity_id and Events.version == version
         )
         async with self._engine.begin() as conn:
             cursor = await conn.execute(stmt)

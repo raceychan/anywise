@@ -65,7 +65,7 @@ class Todo:
     @classmethod
     def apply(cls, event: TodoCreated) -> "Self":
         return cls(
-            todo_id=event.aggregate_id,
+            todo_id=event.entity_id,
             title=event.title,
             content=event.content,
         )

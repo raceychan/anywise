@@ -25,4 +25,10 @@ now will build guards before send, now the order of anywise.include(guard_regist
 - add dependency injection to guard
 - scoped send
 
+## version 0.1.5
+
+- pre-defined `Event` class
+- docs
+- global guard
+
 ### version 1.0.0

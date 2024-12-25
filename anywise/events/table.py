@@ -39,7 +39,7 @@ class TableBase:
 class Events(TableBase):
     __tablename__: str = "events"
     __table_args__: tuple[Any] = (
-        sa.Index("idx_events_aggregate_id_version", "aggregate_id", "version"),
+        sa.Index("idx_events_entity_id_version", "entity_id", "version"),
     )
 
     id = sa.Column("id", sa.Integer, primary_key=True, autoincrement=True)
@@ -49,7 +49,7 @@ class Events(TableBase):
     event_type = sa.Column("event_type", sa.String)
     event_body = sa.Column("event_body", sa.JSON)
     source = sa.Column("source", sa.String, nullable=False)
-    aggregate_id = sa.Column("aggregate_id", sa.String, index=True, nullable=False)
+    entity_id = sa.Column("entity_id", sa.String, index=True, nullable=False)
     timestamp = sa.Column("timestamp", sa.String)
     version = sa.Column("version", sa.String)
 

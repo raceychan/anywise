@@ -1,7 +1,7 @@
 import typing as ty
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
-from sqlalchemy.sql import insert, select, update
+from sqlalchemy.sql import insert, select  # , update
 
 from anywise import Anywise, MessageRegistry, use
 from anywise.events import EventStore
@@ -79,7 +79,7 @@ class TodoService:
 
     async def add_new_todo(self, command: CreateTodo):
         event = TodoCreated(
-            aggregate_id=command.id, title=command.title, content=command.content
+            entity_id=command.id, title=command.title, content=command.content
         )
         todo = Todo.apply(event)
         await self._repo.add(todo)
@@ -88,7 +88,7 @@ class TodoService:
         return command.id
 
     async def rename_todo(self, command: RenameTodo):
-        event = TodoRetitled(title=command.title, aggregate_id=command.todo_id)
+        event = TodoRetitled(title=command.title, entity_id=command.todo_id)
         todo = await self._repo.get(command.todo_id)
         if not todo:
             raise KeyError(f"todo with {command.todo_id=} not found")

@@ -29,26 +29,24 @@ def all_subclasses(cls: type) -> set[type]:
     )
 
 
-def _init_type_registry():
-    __EventTypeRegistry__.update({type_id(cls): cls for cls in all_subclasses(Event)})
-
-
-def get_event_cls(type_id: str) -> type["Event"]:
+def get_event_cls(event_type_id: str) -> type["Event"]:
     try:
-        return __EventTypeRegistry__[type_id]
+        return __EventTypeRegistry__[event_type_id]
     except KeyError:
-        _init_type_registry()
+        __EventTypeRegistry__.update(
+            {type_id(cls): cls for cls in all_subclasses(Event)}
+        )
         # if fail again just raise
 
     try:
-        return __EventTypeRegistry__[type_id]
+        return __EventTypeRegistry__[event_type_id]
     except KeyError:
-        raise UnregisteredEventError(type_id)
+        raise UnregisteredEventError(event_type_id)
 
 
 class UnregisteredEventError(Exception):
     def __init__(self, type_id: str):
-        _, name = type_id.split(":")
+        name = type_id.replace(":", ".")
         super().__init__(f"event {name} is not registered")
 
 
@@ -57,7 +55,7 @@ class IEvent(Protocol):
     def event_id(self) -> str: ...
 
     @property
-    def aggregate_id(self) -> str: ...
+    def entity_id(self) -> str: ...
 
     @property
     def timestamp(self) -> str: ...
@@ -71,7 +69,7 @@ class NormalizedEvent(TypedDict):
 
     # base fields
     event_id: str
-    aggregate_id: str
+    entity_id: str
     timestamp: str
 
     # current only fields
@@ -86,10 +84,10 @@ else:
     from msgspec import field as msgspec_field
 
     class Event(Struct, frozen=True, kw_only=True):
-        __source__: ClassVar[str] = ""  # project name, like demo
+        __source__: ClassVar[str] = "unspecified"  # project name, like demo
         __version__: ClassVar[str] = "1"  # specversion
 
-        aggregate_id: str
+        entity_id: str
         event_id: str = msgspec_field(default_factory=uuid_factory)
         timestamp: str = msgspec_field(default_factory=utc_now)
 
@@ -102,9 +100,34 @@ else:
 
             mapping["event_type"] = type_id(self.__class__)
             mapping["version"] = self.__version__
-            mapping["source"] = self.__source__ or "demo"
+            mapping["source"] = self.__source__
             mapping["event_body"] = event_body
             return cast(NormalizedEvent, mapping)
+
+    from functools import singledispatchmethod
+    from typing import Self, Sequence
+
+    class Entity(Struct, kw_only=True):
+        entity_id: str
+
+        @singledispatchmethod
+        @classmethod
+        def apply(cls, event: Event) -> "Self":
+            raise NotImplementedError
+
+        @apply.register
+        def _(self, _: object) -> "Self":
+            raise NotImplementedError
+
+        @classmethod
+        def rebuild(cls, events: Sequence[Event]) -> "Self":
+            create, rest = events[0], events[1:]
+            self = cls.apply(create)
+
+            for e in rest:
+                self.apply(e)
+
+            return self
 
 
 # TODO: pydantic version
