@@ -37,7 +37,6 @@ class GRPCSource: ...
 
 
 
-from ..anywise import Anywise
 
 """
 class KafkaSource:

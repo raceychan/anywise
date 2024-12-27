@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
-from typing import Any, ClassVar, Final, Protocol, TypedDict, cast
+from functools import singledispatchmethod
+from typing import Any, ClassVar, Final, Protocol, Self, Sequence, TypedDict, cast
 from uuid import uuid4
 
 __EventTypeRegistry__: Final[dict[str, type]] = {}
@@ -60,6 +61,8 @@ class IEvent(Protocol):
     @property
     def timestamp(self) -> str: ...
 
+    def __normalized__(self) -> "NormalizedEvent": ...
+
 
 class NormalizedEvent(TypedDict):
     # classfields
@@ -81,6 +84,7 @@ try:
 except ImportError:
     pass
 else:
+
     from msgspec import field as msgspec_field
 
     class Event(Struct, frozen=True, kw_only=True):
@@ -91,7 +95,7 @@ else:
         event_id: str = msgspec_field(default_factory=uuid_factory)
         timestamp: str = msgspec_field(default_factory=utc_now)
 
-        def __table_mapping__(self) -> NormalizedEvent:
+        def __normalized__(self) -> NormalizedEvent:
             base_fields = Event.__struct_fields__
             current_only_fields = self.__struct_fields__[: -len(base_fields)]
 
@@ -103,9 +107,6 @@ else:
             mapping["source"] = self.__source__
             mapping["event_body"] = event_body
             return cast(NormalizedEvent, mapping)
-
-    from functools import singledispatchmethod
-    from typing import Self, Sequence
 
     class Entity(Struct, kw_only=True):
         entity_id: str

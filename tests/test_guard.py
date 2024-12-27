@@ -16,7 +16,7 @@ class LogginGuard(BaseGuard):
         super().__init__()
         self._logger = logger
 
-    async def __call__(self, command: object, context: IContext):
+    async def __call__(self, command: UserCommand | CreateUser, context: IContext):
         if (request_id := context.get("request_id")) is None:
             context["request_id"] = request_id = str(uuid4())
 
@@ -32,7 +32,7 @@ class LogginGuard(BaseGuard):
                 return response
 
 
-user_registry.add_guard(LogginGuard, targets=[UserCommand])
+user_registry.add_guards(LogginGuard)
 
 
 class ITest(ty.TypedDict):

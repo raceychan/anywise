@@ -4,12 +4,12 @@ from sqlalchemy.ext import asyncio as saio
 from anywise.events.table import TableBase
 
 
-class Todos(TableBase):
+class TodoTable(TableBase):
     __tablename__: str = "todos"
 
-    id = sa.Column("id", sa.String, primary_key=True)
-    title = sa.Column("title", sa.String, unique=False, index=True)
-    content = sa.Column("content", sa.String, unique=False, index=False)
+    todo_id = sa.Column("todo_id", sa.String, unique=True, nullable=False, index=True)
+    title = sa.Column("title", sa.String, unique=False, nullable=False)
+    content = sa.Column("content", sa.String, unique=False)
     is_completed = sa.Column("is_completed", sa.Boolean, default=False)
 
 

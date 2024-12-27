@@ -14,6 +14,10 @@ cov:
 demo:
 	uv run python -m demo
 
+.PHONY: docs
+docs:
+	uv run mkdocs serve
+
 .PHONY: release
 
 VERSION ?= x.x.x

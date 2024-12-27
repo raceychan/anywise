@@ -2,23 +2,13 @@
 
 Anywise is a framework designed to decouple the business logic of your application from its infrastructure, enabling you to use the same code to handle messages from various sources such as web APIs, message queues, AWS Lambda, and more.
 
-Despite being inspired by Hexagonal Architecture and Event-Driven Architecture, Anywise does not bind itself to any specific purpose.
-
----
-
-Source Code: https://github.com/raceychan/anywise
-
-Documentation: On its way here...
-
----
-
 ## Install
 
 ```py
 pip install anywise
 ```
 
-## Quck Start
+## Quick Start
 
 Let start with defining messages:
 
@@ -32,6 +22,8 @@ class UserCreated(UserEvent): ...
 ```
 
 Next step, Register command handler and event listeners.
+
+## Command Handler / Event Listeners
 
 ### Function-based handler/listener
 
@@ -67,3 +59,10 @@ async def signup(command: CreateUser, anywise: FastWise) -> User:
     return await anywise.send(command)
 ```
 
+## Rationale
+
+Anywise is designed and built to:
+
+1. promote best practices and enterprise architecture in python.
+2. isolating bussiness logic from input ports, encapsulate application core, maxmize reusability of logic, allowing one app for web api, kafka, flink, etc.
+3. let you write less code than other wise

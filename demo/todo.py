@@ -1,13 +1,14 @@
 import typing as ty
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
-from sqlalchemy.sql import insert, select  # , update
+from sqlalchemy.sql import insert, select, update
 
 from anywise import Anywise, MessageRegistry, use
 from anywise.events import EventStore
 
 from .message import (
     CreateTodo,
+    ListTodoEvents,
     ListTodos,
     RenameTodo,
     Todo,
@@ -16,7 +17,7 @@ from .message import (
     TodoEvent,
     TodoRetitled,
 )
-from .table import Todos
+from .table import TodoTable
 
 # App layer
 
@@ -42,8 +43,8 @@ class TodoRepository:
         self._engine = engine
 
     async def add(self, todo: Todo):
-        stmt = insert(Todos).values(
-            id=todo.todo_id,
+        stmt = insert(TodoTable).values(
+            todo_id=todo.todo_id,
             title=todo.title,
             content=todo.content,
             is_completed=todo.is_completed,
@@ -53,16 +54,30 @@ class TodoRepository:
             await conn.execute(stmt)
 
     async def get(self, todo_id: str) -> Todo | None:
-        stmt = select(Todos).where(Todos.id == todo_id)
+        stmt = select(TodoTable).where(TodoTable.todo_id == todo_id)
         async with self._engine.begin() as conn:
             cursor = await conn.execute(stmt)
             mapping = cursor.mappings().one_or_none()
 
         if mapping:
-            return Todo(**mapping)
+            return Todo(
+                todo_id=mapping["todo_id"],
+                title=mapping["title"],
+                content=mapping["content"],
+                is_completed=mapping["is_completed"],
+            )
         return None
 
-    async def retitle(self, todo_id: str, title: str) -> None: ...
+    async def retitle(self, todo_id: str, title: str) -> None:
+        stmt = update(TodoTable).values(title=title).where(TodoTable.todo_id == todo_id)
+        async with self._engine.begin() as conn:
+            await conn.execute(stmt)
+
+
+@registry
+async def list_events(query: ListTodoEvents, es: EventStore) -> list[dict[str, ty.Any]]:
+    events = await es.list_events(query.todo_id)
+    return [e.__normalized__() for e in events]
 
 
 @registry
@@ -104,7 +119,3 @@ class TodoService:
         async for stream in self._es.all_event_streams():
             todos.append(Todo.rebuild(stream))
         return todos
-
-
-# async def listen_todo_created(self, event: TodoCreated, context: dict[str, ty.Any]):
-#     print(f"listen_todo_created: {event=}")

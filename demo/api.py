@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from anywise import Anywise
 from anywise.integration.fastapi import FastWise
 
-from .message import CreateTodo, ListTodos, Todo
+from .message import CreateTodo, ListTodoEvents, ListTodos, RenameTodo, Todo
 from .table import create_tables
 from .todo import registry
 
@@ -19,10 +19,20 @@ async def read_todos(anywise: FastWise) -> list[Todo]:
     return res
 
 
+@todo_router.get("/events")
+async def read_todo_events(todo_id: str, anywise: FastWise) -> list[dict[str, ty.Any]]:
+    return await anywise.send(ListTodoEvents(todo_id=todo_id))
+
+
 @todo_router.post("/todos")
 async def _(command: CreateTodo, anywise: FastWise) -> str:
     res = await anywise.send(command)
     return res
+
+
+@todo_router.put("/todos/{todo_id}")
+async def _(command: RenameTodo, anywise: FastWise):
+    return await anywise.send(command)
 
 
 class AppState(ty.TypedDict):

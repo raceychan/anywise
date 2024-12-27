@@ -1,9 +1,11 @@
 from dataclasses import dataclass, field
 from functools import singledispatchmethod
-from typing import Sequence, Self
+from typing import Self, Sequence
 from uuid import uuid4
 
-from anywise.events import Event
+from fastapi import Query
+
+from anywise.events import Event, IEvent
 
 
 # App Layer
@@ -13,6 +15,11 @@ def uuid_factory() -> str:
 
 @dataclass
 class TodoCommand: ...
+
+
+@dataclass
+class ListTodoEvents(TodoCommand):
+    todo_id: str
 
 
 class TodoEvent(Event): ...
@@ -52,7 +59,7 @@ class Todo:
     is_completed: bool = False
 
     @classmethod
-    def rebuild(cls, events: Sequence[Event]) -> "Todo":
+    def rebuild(cls, events: Sequence[IEvent]) -> "Todo":
         create, rest = events[0], events[1:]
         self = cls.apply(create)
 

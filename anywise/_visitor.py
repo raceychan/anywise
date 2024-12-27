@@ -1,9 +1,8 @@
-import ast
 import inspect
 import sys
 from collections import defaultdict
 from types import UnionType
-from typing import Any, Callable, Union, get_args, get_origin
+from typing import Any, Callable, TypeGuard, Union, cast, get_args, get_origin
 
 from ._itypes import FuncMeta, HandlerMapping, ListenerMapping, MethodMeta
 from .errors import MessageHandlerNotFoundError, NotSupportedHandlerTypeError
@@ -11,34 +10,34 @@ from .errors import MessageHandlerNotFoundError, NotSupportedHandlerTypeError
 type Target = type | Callable[..., Any]
 
 
-class ExceptionFinder(ast.NodeVisitor):
-    def __init__(self):
-        self.exceptions: list[str] = []
+# class ExceptionFinder(ast.NodeVisitor):
+#     def __init__(self):
+#         self.exceptions: list[str] = []
 
-    def visit_Raise(self, node: ast.Raise):
-        if node.exc:  # If there is an exception being raised
-            if isinstance(node.exc, ast.Call) and isinstance(node.exc.func, ast.Name):
-                # Example: `raise ValueError("...")`
-                self.exceptions.append(node.exc.func.id)
-            elif isinstance(node.exc, ast.Name):
-                # Example: `raise CustomException`
-                self.exceptions.append(node.exc.id)
-        self.generic_visit(node)
+#     def visit_Raise(self, node: ast.Raise):
+#         if node.exc:  # If there is an exception being raised
+#             if isinstance(node.exc, ast.Call) and isinstance(node.exc.func, ast.Name):
+#                 # Example: `raise ValueError("...")`
+#                 self.exceptions.append(node.exc.func.id)
+#             elif isinstance(node.exc, ast.Name):
+#                 # Example: `raise CustomException`
+#                 self.exceptions.append(node.exc.id)
+#         self.generic_visit(node)
 
 
-def collect_exceptions[**P, T](func: Callable[P, T]) -> list[Exception]:
-    source = inspect.getsource(func)
-    tree = ast.parse(source)
-    finder = ExceptionFinder()
-    finder.visit(tree)
-    excs: list[Exception] = []
-    for e in finder.exceptions:
-        if exc := getattr(__builtins__, e, None):
-            excs.append(exc)
-        else:
-            exc = func.__globals__[e]
-            excs.append(exc)
-    return excs
+# def collect_exceptions[**P, T](func: Callable[P, T]) -> list[Exception]:
+#     source = inspect.getsource(func)
+#     tree = ast.parse(source)
+#     finder = ExceptionFinder()
+#     finder.visit(tree)
+#     excs: list[Exception] = []
+#     for e in finder.exceptions:
+#         if exc := getattr(__builtins__, e, None):
+#             excs.append(exc)
+#         else:
+#             exc = func.__globals__[e]
+#             excs.append(exc)
+#     return excs
 
 
 def _extract_from_function[
@@ -170,7 +169,16 @@ def all_subclasses(cls: type) -> set[type]:
     )
 
 
-def gather_commands(command_type: type) -> set[type]:
+def is_union_type(any_type: type | UnionType) -> TypeGuard[UnionType]:
+    if sys.version_info >= (3, 10):
+        union_meta = (UnionType, Union)
+    else:
+        union_meta = (Union,)
+
+    return get_origin(any_type) in union_meta
+
+
+def gather_commands(command_type: type | UnionType) -> set[type]:
     """
     get a list of command from an annotation of command
     if is a union of commands, collect each of them
@@ -179,16 +187,13 @@ def gather_commands(command_type: type) -> set[type]:
 
     command_types: set[type] = set()
 
-    if sys.version_info >= (3, 10):
-        union_meta = (UnionType, Union)
-    else:
-        union_meta = (Union,)
-
-    if (origin := get_origin(command_type)) in union_meta:
-        union_commands = get_args(origin)
+    if is_union_type(command_type):
+        union_commands = get_args(command_type)
         for command in union_commands:
             command_types |= gather_commands(command)
     else:
+        # this might be a bug in pylance
+        command_type = cast(type, command_type)
         command_types.add(command_type)
         command_types |= all_subclasses(command_type)
     return command_types

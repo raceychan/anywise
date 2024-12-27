@@ -5,7 +5,7 @@ from sqlalchemy import orm as sa_orm
 from sqlalchemy.ext import asyncio as saio
 from sqlalchemy.sql import func
 
-from .model import Event, NormalizedEvent, get_event_cls
+from .model import Event, IEvent, NormalizedEvent, get_event_cls
 
 TABLE_RESERVED_VARS: set[str] = {
     "id",  # primary key
@@ -30,19 +30,19 @@ def declarative(cls: type) -> type[sa_orm.DeclarativeBase]:
 @declarative
 class TableBase:
     "Exert constraints on table creation, and reduce duplicate code"
+    id = sa.Column("id", sa.Integer, primary_key=True, autoincrement=True)
     gmt_modified = sa.Column(
         "gmt_modified", sa.DateTime, server_default=func.now(), onupdate=func.now()
     )
     gmt_created = sa.Column("gmt_created", sa.DateTime, server_default=func.now())
 
 
-class Events(TableBase):
+class EventTable(TableBase):
     __tablename__: str = "events"
     __table_args__: tuple[Any] = (
         sa.Index("idx_events_entity_id_version", "entity_id", "version"),
     )
 
-    id = sa.Column("id", sa.Integer, primary_key=True, autoincrement=True)
     event_id = sa.Column(
         "event_id", sa.String, index=False, nullable=False, unique=True
     )
@@ -64,8 +64,8 @@ async def create_tables(engine: saio.AsyncEngine):
         await conn.run_sync(TableBase.metadata.create_all)
 
 
-def event_to_mapping(event: Event) -> NormalizedEvent:
-    return event.__table_mapping__()
+def event_to_mapping(event: IEvent) -> NormalizedEvent:
+    return event.__normalized__()
 
 
 def mapping_to_event(row_mapping: Mapping[Any, Any]) -> Event:

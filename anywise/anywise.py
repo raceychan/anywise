@@ -9,6 +9,7 @@ from ididi import AsyncScope, DependencyGraph
 from ._itypes import EventContext, FuncMeta, IContext, IGuard
 from ._registry import (
     GuardMapping,
+    GuardMeta,
     HandlerMapping,
     ListenerMapping,
     MessageRegistry,
@@ -75,14 +76,7 @@ class HandlerManager(InjectMixin):
         super().__init__(dg)
         self._handler_metas: dict[type, FuncMeta[Any]] = {}
         self._guard_mapping: GuardMapping = defaultdict(list)
-
-        """
-        TODO: collect global command guard
-        self._global_guard: list[IGuard]
-
-        @user_registry.pre_handle
-        async def logging(command: Any, context: IContext) -> None:
-        """
+        self._global_guard: list[GuardMeta] = []
 
     def include_handlers(self, command_mapping: HandlerMapping[Any]):
         handler_mapping = {msg_type: meta for msg_type, meta in command_mapping.items()}
@@ -90,10 +84,13 @@ class HandlerManager(InjectMixin):
 
     def include_guards(self, guard_mapping: GuardMapping):
         # gather commands
-        for origin_target, guad_meta in guard_mapping.items():
-            drived_target = gather_commands(origin_target)
-            for target in drived_target:
-                self._guard_mapping[target].extend(guad_meta)
+        for origin_target, guard_meta in guard_mapping.items():
+            if origin_target == Any or origin_target is object:
+                self._global_guard.extend(guard_meta)
+            else:
+                drived_targets = gather_commands(origin_target)
+                for target in drived_targets:
+                    self._guard_mapping[target].extend(guard_meta)
 
     async def _chain_guards(
         self,
@@ -103,9 +100,10 @@ class HandlerManager(InjectMixin):
         scope: AsyncScope,
     ):
 
-        metas = self._guard_mapping[msg_type]
-        if not metas:
+        on_duty_guards = self._guard_mapping[msg_type]
+        if not on_duty_guards:
             return handler
+        all_guards = self._global_guard + on_duty_guards
 
         guards: list[IGuard] = [
             (
@@ -113,7 +111,7 @@ class HandlerManager(InjectMixin):
                 if isinstance(meta.guard, type)
                 else meta.guard
             )
-            for meta in metas
+            for meta in all_guards
         ]
 
         for i in range(len(guards) - 1):

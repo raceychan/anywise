@@ -2,7 +2,7 @@ import inspect
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Literal, Sequence, Unpack, cast, overload
+from typing import Any, Callable, Unpack, cast, overload
 
 from ididi import DependencyGraph, INode, INodeConfig
 
@@ -20,7 +20,6 @@ from ._visitor import Target, collect_handlers, collect_listeners
 from .errors import MessageHandlerNotFoundError
 from .guard import Guard, GuardFunc, PostHandle
 
-type GuardType = Literal["pre_handle", "post_handle", "both"]
 type GuardMapping = defaultdict[type, list[GuardMeta]]
 
 
@@ -30,6 +29,7 @@ class GuardMeta:
     guard: IGuard | type[IGuard]
 
 
+# Guard Registry
 class MessageRegistry[C, E]:
     @overload
     def __init__(
@@ -200,6 +200,7 @@ class MessageRegistry[C, E]:
             for post_handle in post_handles:
                 self.post_handle(post_handle)
 
+    # separate guard registry from message registry
     def _extra_guardfunc_annotation(self, func: Callable[..., Any]) -> type:
         if isinstance(func, type):
             f = func.__call__
@@ -212,7 +213,7 @@ class MessageRegistry[C, E]:
         try:
             cmd_type = func_params[command_index].annotation
         except IndexError:
-            raise Exception
+            raise Exception("can't extract command type from annotation")
         return cmd_type
 
     def pre_handle(self, func: GuardFunc) -> GuardFunc:
@@ -227,36 +228,26 @@ class MessageRegistry[C, E]:
         self.guard_mapping[meta.guard_target].append(meta)
         return func
 
-    def add_guard(
-        self, *guards: IGuard | type[IGuard], targets: Sequence[type[C]]
-    ) -> None:
+    def add_guards(self, *guards: IGuard | type[IGuard]) -> None:
         for guard in guards:
-            for target in targets:
-                meta = GuardMeta(guard_target=target, guard=guard)
-                self.guard_mapping[target].append(meta)
+            target = self._extra_guardfunc_annotation(guard)
+            meta = GuardMeta(guard_target=target, guard=guard)
+            self.guard_mapping[target].append(meta)
 
-    def guard[
-        **P, R
-    ](self, func_or_cls: IGuard | type[IGuard]) -> IGuard | type[IGuard]:
-        """
-        @registry.guard
-        async def guard_func(command: Command, context: IContext, handler):
-            # do something before
-            response = await handler
-            # do something after
+    # def guard[
+    #     **P, R
+    # ](self, func_or_cls: IGuard | type[IGuard]) -> IGuard | type[IGuard]:
+    #     """
+    #     @registry.guard
+    #     async def guard_func(command: Command, context: IContext, next: GuardFunc):
+    #         # do something before
+    #         response = await next(command, context)
+    #         # do something after
 
-        @registry.guard
-        class LoggingGuard(BaseGuard):
-            async def __call__(self, command: Command, context: IContext):
-                # do something before
-                response = await handler
-                # do something after
-        """
-        raise NotImplementedError
-        target = self._extra_guardfunc_annotation(func_or_cls)
-        if isinstance(func_or_cls, type):
-            meta = GuardMeta(guard_target=target, guard=func_or_cls)
-        else:
-            # func_or_cls is a function, chain next guard by partial
-            meta = GuardMeta(guard_target=target, guard=func_or_cls)
-        return target
+    #     @registry.guard
+    #     class LoggingGuard(BaseGuard):
+    #         async def __call__(self, command: Command, context: IContext):
+    #             # do something before
+    #             response = await self._next_guard
+    #             # do something after
+    #     """
