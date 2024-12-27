@@ -6,9 +6,9 @@ Despite being inspired by Hexagonal Architecture and Event-Driven Architecture, 
 
 ---
 
-Source Code: https://github.com/raceychan/anywise
+Documentation: https://raceychan.github.io/anywise/
 
-Documentation: On its way here...
+Source Code: https://github.com/raceychan/anywise
 
 ---
 
