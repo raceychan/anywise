@@ -32,13 +32,6 @@ plugins:
 
 extra:
   social:
-    # - icon: fontawesome/brands/github-alt
-    # link: https://github.com/james-willett
-    # - icon: fontawesome/brands/twitter
-    # link: https://twitter.com/TheJamesWillett
-    # - icon: fontawesome/brands/linkedin
-    # link: https://www.linkedin.com/in/willettjames/
-
     - icon: fontawesome/brands/github
       link: https://www.github.com/raceychan
 
@@ -58,9 +51,6 @@ markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:materialx.emoji.twemoji
       emoji_generator: !!python/name:materialx.emoji.to_svg
-        # copyright: |
-        #   &copy; 2023 <a href="https://github.com/james-willett"  target="_blank" rel="noopener">James Willett</a>
-
 
 nav:
   - anywise: index.md
@@ -68,4 +58,3 @@ nav:
   - Features: features.md
   - Architecture: architecture.md
   - Roadmap: roadmap.md
-  # - FAQ: FAQ.md
