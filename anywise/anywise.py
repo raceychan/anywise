@@ -2,11 +2,21 @@ from asyncio import to_thread
 from collections import defaultdict
 from functools import partial
 from types import MappingProxyType, MethodType
-from typing import Any, Awaitable, Callable, cast
+from typing import Any, AsyncGenerator, Awaitable, Callable, cast
 
 from ididi import AsyncScope, DependencyGraph
 
-from ._itypes import EventContext, FuncMeta, IContext, IGuard
+from ._itypes import (
+    CommandHandler,
+    EventContext,
+    EventListeners,
+    FuncMeta,
+    IContext,
+    IGuard,
+    PublishStrategy,
+    SendStrategy,
+    LifeSpan
+)
 from ._registry import (
     GuardMapping,
     GuardMeta,
@@ -18,23 +28,22 @@ from ._registry import (
 from ._visitor import gather_commands
 from .errors import UnregisteredMessageError
 
-type EventListeners = list[Callable[[Any, Any], Any]]
-type CommandHandler = Callable[[Any, IContext], Any] | IGuard
-type SendStrategy = Callable[[Any, IContext, CommandHandler], Any]
-type PublishStrategy = Callable[[Any, EventContext, EventListeners], Awaitable[None]]
-
 
 async def default_send(
-    message: Any, context: IContext, handler: Callable[[Any, IContext], Any]
+    message: Any, context: IContext | None, handler: Callable[[Any, IContext], Any]
 ) -> Any:
+    if context is None:
+        context = dict()
     return await handler(message, context)
 
 
 async def default_publish(
     message: Any,
-    context: EventContext,
+    context: EventContext | None,
     listeners: list[Callable[[Any, EventContext], Awaitable[None]]],
 ) -> None:
+    if context is None:
+        context = MappingProxyType({})
     for listener in listeners:
         await listener(message, context)
 
@@ -85,7 +94,7 @@ class HandlerManager(InjectMixin):
     def include_guards(self, guard_mapping: GuardMapping):
         # gather commands
         for origin_target, guard_meta in guard_mapping.items():
-            if origin_target == Any or origin_target is object:
+            if origin_target is Any or origin_target is object:
                 self._global_guard.extend(guard_meta)
             else:
                 drived_targets = gather_commands(origin_target)
@@ -98,12 +107,11 @@ class HandlerManager(InjectMixin):
         handler: Callable[..., Any],
         *,
         scope: AsyncScope,
-    ):
+    ) -> CommandHandler:
+        command_guards = self._global_guard + self._guard_mapping[msg_type]
 
-        on_duty_guards = self._guard_mapping[msg_type]
-        if not on_duty_guards:
+        if not command_guards:
             return handler
-        all_guards = self._global_guard + on_duty_guards
 
         guards: list[IGuard] = [
             (
@@ -111,7 +119,7 @@ class HandlerManager(InjectMixin):
                 if isinstance(meta.guard, type)
                 else meta.guard
             )
-            for meta in all_guards
+            for meta in command_guards
         ]
 
         for i in range(len(guards) - 1):
@@ -187,11 +195,17 @@ class Anywise(InjectMixin):
         self,
         *registries: MessageRegistry[Any, Any],
         dependency_graph: DependencyGraph | None = None,
+        lifespan: LifeSpan | None = None,
         sender: SendStrategy = default_send,
         publisher: PublishStrategy = default_publish,
     ):
         dependency_graph = dependency_graph or DependencyGraph()
         super().__init__(dependency_graph)
+
+        if lifespan:
+            self._lifespan = self._dg.entry(lifespan)
+        else:
+            self._lifespan = None
 
         self._sender = sender
         self._publisher = publisher
@@ -200,6 +214,23 @@ class Anywise(InjectMixin):
         self._dg.register_dependent(self)
 
         self.include(*registries)
+
+    async def __enter__(self):
+        if self._lifespan is not None:
+            await anext(self._lifespan)
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[Exception] | None,
+        exc: Exception | None,
+        exc_tb: Any | None,
+    ):
+        if self._lifespan:
+            await anext(self._lifespan)
+
+    def register_singleton(self, singleton: Any):
+        self._dg.register_dependent(singleton)
 
     def include(self, *registries: MessageRegistry[Any, Any]) -> None:
         for msg_registry in registries:
@@ -213,17 +244,15 @@ class Anywise(InjectMixin):
         return self._dg.scope(name)
 
     async def send(self, msg: object, *, context: IContext | None = None) -> Any:
-        if context is None:
-            context = {}
         scope_proxy = self._dg.use_scope(create_on_miss=True, as_async=True)
 
         async with scope_proxy as scope:
             handler = await self._handler_manager.resolve_handler(type(msg), scope)
             return await self._sender(msg, context, handler)
 
-    async def publish(self, msg: object, context: EventContext | None = None) -> None:
-        if context is None:
-            context = MappingProxyType[str, Any]({})
+    async def publish(
+        self, msg: object, *, context: EventContext | None = None
+    ) -> None:
         scope_proxy = self._dg.use_scope(create_on_miss=True, as_async=True)
 
         async with scope_proxy as scope:

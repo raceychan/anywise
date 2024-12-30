@@ -1,6 +1,10 @@
 # Anywise
 
-Anywise is a framework designed to decouple the business logic of your application from its infrastructure, enabling you to use the same code to handle messages from various sources such as web APIs, message queues, AWS Lambda, and more.
+Decouples the intention behind the execution of application services from the application service itself, whether subjective (via Command) or objective (via Event).
+
+Eliminates direct dependencies on implementation details.
+
+Improves development speed, reduces testing complexity, and enhances the overall reusability of the program.
 
 ## Install
 

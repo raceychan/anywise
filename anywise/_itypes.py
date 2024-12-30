@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import (
     Annotated,
+    AsyncGenerator,
     Any,
     Awaitable,
     Callable,
@@ -22,6 +23,16 @@ type GuardFunc = Callable[[Any, IContext], Awaitable[Any]]
 type PostHandle[R] = Callable[[Any, IContext, R], Awaitable[R]]
 type EventContext = Mapping[Any, Any]
 
+
+type CommandHandler = Callable[[Any, IContext], Any] | IGuard
+type EventListener = Callable[[Any, EventContext], Any]
+type EventListeners = list[EventListener]
+type SendStrategy = Callable[[Any, IContext | None, CommandHandler], Any]
+type PublishStrategy = Callable[
+    [Any, EventContext | None, EventListeners], Awaitable[None]
+]
+
+type LifeSpan = Callable[..., AsyncGenerator[Any, None]]
 
 class IGuard(Protocol):
 

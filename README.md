@@ -1,8 +1,10 @@
 # Anywise
 
-Anywise is a framework designed to decouple the business logic of your application from its infrastructure, enabling you to use the same code to handle messages from various sources such as web APIs, message queues, AWS Lambda, and more.
+Anywise provides a universal and flexible API for your application by abstracting function calls into message passing.
 
-Despite being inspired by Hexagonal Architecture and Event-Driven Architecture, Anywise does not bind itself to any specific purpose.
+- Decouples the intention behind the execution of application services from the application service itself, whether subjective (via Command) or objective (via Event).
+- Eliminates direct dependencies on implementation details.
+- Improves development speed, reduces testing complexity, and enhances the reusability of the application as a whole.
 
 ---
 
@@ -33,7 +35,9 @@ class UserCreated(UserEvent): ...
 
 Next step, Register command handler and event listeners.
 
-### Function-based handler/listener
+### handler/listener
+
+for simplicity, we will use `function-based` handler here
 
 ```py
 registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
@@ -51,12 +55,22 @@ async def create_user(
 async def notify_user(event: UserCreated, service: EmailSender):
      await service.send_greeting(command.user_email)
 
-# you can also menually register many handler at once
 
+```
+
+you can use `registry` as a decorator to register handler/listeners
+
+or you can register many handler at once using `MessageRegistry.register_all`
+
+```py
 registry.register_all(create_user, notify_user)
 ```
 
-### Example usage with fastapi
+### Message Source
+
+Message source is where you can your message from.
+
+Here we use fastapi as our message source, but it can be other choices.
 
 ```py
 from anywise import Anywise
@@ -66,4 +80,3 @@ from anywise.integration.fastapi import FastWise
 async def signup(command: CreateUser, anywise: FastWise) -> User:
     return await anywise.send(command)
 ```
-

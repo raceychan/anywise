@@ -1,21 +1,15 @@
 from collections import defaultdict
 from typing import AsyncGenerator
 
-from ididi import use
 from sqlalchemy import insert, select
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .model import IEvent
 from .table import EventTable, event_to_mapping, mapping_to_event
 
 
-def engine_factory() -> AsyncEngine:
-    url = "sqlite+aiosqlite:///demo/db.db"
-    return create_async_engine(url)
-
-
 class EventStore:
-    def __init__(self, engine: AsyncEngine = use(engine_factory)):
+    def __init__(self, engine: AsyncEngine):
         self._engine = engine
 
     async def add(self, event: IEvent):

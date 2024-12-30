@@ -8,6 +8,8 @@ from ididi import DependencyGraph, INode, INodeConfig
 
 from ._itypes import (
     MISSING,
+    CommandHandler,
+    EventListener,
     FuncMeta,
     HandlerMapping,
     IGuard,
@@ -29,7 +31,29 @@ class GuardMeta:
     guard: IGuard | type[IGuard]
 
 
-# Guard Registry
+def register(message_or_func: type | EventListener | CommandHandler):
+    """
+    @register(UserCommand)
+    class UserService:
+        ...
+
+    we don't need a base command for function handler
+
+    @register
+    async def create_user(command: CreateUser, context: dict[str, Any]):
+        ...
+
+    """
+    if isinstance(message_or_func, type):
+
+        def cls_receiver(service_cls: type):
+            return service_cls
+
+        return cls_receiver
+    return message_or_func
+
+
+# TODO: Guard Registry
 class MessageRegistry[C, E]:
     @overload
     def __init__(
@@ -102,7 +126,7 @@ class MessageRegistry[C, E]:
         self._graph.node(**config)(factory)
         return factory
 
-    def _register_commandhanlders(self, handler: Target):
+    def _register_commandhanlders(self, handler: Target) -> None:
         if not self._command_base:
             return
 
@@ -123,7 +147,7 @@ class MessageRegistry[C, E]:
                 )
         self.command_mapping.update(command_mapping)
 
-    def _register_eventlisteners(self, listeners: Target):
+    def _register_eventlisteners(self, listeners: Target) -> None:
         if not self._event_base:
             return
 
@@ -251,3 +275,4 @@ class MessageRegistry[C, E]:
     #             response = await self._next_guard
     #             # do something after
     #     """
+

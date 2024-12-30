@@ -5,6 +5,9 @@ from uuid import uuid4
 
 __EventTypeRegistry__: Final[dict[str, type]] = {}
 
+# TODO: rename to folder message
+# add a Command Model, with type registry
+
 
 def uuid_factory() -> str:
     return str(uuid4())
@@ -21,6 +24,7 @@ def type_id(cls: type["Event"]) -> str:
     e.g.
     "demo.domain.event:UserCreated"
     """
+    # return cls.__type_id__()
     return f"{cls.__module__}:{cls.__name__}"
 
 
@@ -60,6 +64,10 @@ class IEvent(Protocol):
 
     @property
     def timestamp(self) -> str: ...
+
+    @classmethod
+    def __type_id__(cls) -> str:
+        ...
 
     def __normalized__(self) -> "NormalizedEvent": ...
 

@@ -31,4 +31,9 @@ now will build guards before send, now the order of anywise.include(guard_regist
 - docs
 - global guard
 
+## version 0.1.6
+
+- refactory MessageRegistry
+- add a source support
+
 ### version 1.0.0
