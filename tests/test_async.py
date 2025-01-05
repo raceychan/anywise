@@ -49,7 +49,7 @@ async def update_user(
 
 @user_message_registry
 async def react_to_event(
-    event: UserCreated,
+    event: UserCreated | UserNameUpdated,
     service: UserService = use(user_service_factory),
 ) -> None:
     print(f"handling {event=}")

@@ -17,7 +17,7 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def type_id(cls: type["Event"]) -> str:
+def deafult_typeid(cls: type["Event"]) -> str:
     """
     generate a type_id based on event class
 
@@ -39,7 +39,7 @@ def get_event_cls(event_type_id: str) -> type["Event"]:
         return __EventTypeRegistry__[event_type_id]
     except KeyError:
         __EventTypeRegistry__.update(
-            {type_id(cls): cls for cls in all_subclasses(Event)}
+            {deafult_typeid(cls): cls for cls in all_subclasses(Event)}
         )
         # if fail again just raise
 
@@ -66,8 +66,7 @@ class IEvent(Protocol):
     def timestamp(self) -> str: ...
 
     @classmethod
-    def __type_id__(cls) -> str:
-        ...
+    def __type_id__(cls) -> str: ...
 
     def __normalized__(self) -> "NormalizedEvent": ...
 
@@ -103,6 +102,11 @@ else:
         event_id: str = msgspec_field(default_factory=uuid_factory)
         timestamp: str = msgspec_field(default_factory=utc_now)
 
+        @classmethod
+        def __type_id__(cls) -> str:
+            "generate a unique id for event type, e.g. 'demo.domain.event:UserCreated', if class is renamed make sure to update this method"
+            return deafult_typeid(cls)
+
         def __normalized__(self) -> NormalizedEvent:
             base_fields = Event.__struct_fields__
             current_only_fields = self.__struct_fields__[: -len(base_fields)]
@@ -110,7 +114,7 @@ else:
             mapping = {f: getattr(self, f) for f in base_fields}
             event_body = {f: getattr(self, f) for f in current_only_fields}
 
-            mapping["event_type"] = type_id(self.__class__)
+            mapping["event_type"] = deafult_typeid(self.__class__)
             mapping["version"] = self.__version__
             mapping["source"] = self.__source__
             mapping["event_body"] = event_body

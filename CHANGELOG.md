@@ -36,4 +36,8 @@ now will build guards before send, now the order of anywise.include(guard_regist
 - refactory MessageRegistry
 - add a source support
 
+## version 0.1.7
+
+register union types
+
 ### version 1.0.0

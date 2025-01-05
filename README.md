@@ -1,8 +1,9 @@
 # Anywise
 
-Anywise provides a universal and flexible API for your application by abstracting function calls into message passing.
+Anywise provides a universal and flexible API for your application by abstracting function calls into message passing, 
+make it easy to build scalable, maintainable, and testable applications.
 
-- Decouples the intention behind the execution of application services from the application service itself, whether subjective (via Command) or objective (via Event).
+- Decouples the intention behind the execution of application services from the application service itself
 - Eliminates direct dependencies on implementation details.
 - Improves development speed, reduces testing complexity, and enhances the reusability of the application as a whole.
 

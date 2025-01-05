@@ -5,7 +5,7 @@ from sqlalchemy import orm as sa_orm
 from sqlalchemy.ext import asyncio as saio
 from sqlalchemy.sql import func
 
-from .model import Event, IEvent, NormalizedEvent, get_event_cls
+from .model import IEvent, NormalizedEvent, get_event_cls
 
 TABLE_RESERVED_VARS: set[str] = {
     "id",  # primary key
@@ -45,18 +45,35 @@ class EventTable(TableBase):
 
     event_id = sa.Column(
         "event_id", sa.String, index=False, nullable=False, unique=True
-    )
+    )  # entity_id of the aggregate root
     event_type = sa.Column("event_type", sa.String)
     event_body = sa.Column("event_body", sa.JSON)
     source = sa.Column("source", sa.String, nullable=False)
     entity_id = sa.Column("entity_id", sa.String, index=True, nullable=False)
     timestamp = sa.Column("timestamp", sa.String)
     version = sa.Column("version", sa.String)
+    # version of the aggregate root entity
 
 
-# class OutBoxEvents(Events):
+# class OutBoxEvents(TableBase):
+#     """
+#     id BIGINT PRIMARY KEY AUTO_INCREMENT,       -- Unique outbox record ID
+#     event_id BIGINT NOT NULL,                   -- Foreign key to the events table
+#     status ENUM('pending', 'sent', 'failed') DEFAULT 'pending',  -- Delivery status
+#     processed_at TIMESTAMP NULL,                -- Timestamp when the event was processed or sent
+#     retry_count INT DEFAULT 0,                  -- Number of retries
+#     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- When the outbox record was created
+#     CONSTRAINT fk_event_id FOREIGN KEY (event_id) REFERENCES events(id) -- Link to the event table
+#     """
+
 #     __tablename__: str = "outbox_events"
-#     consumed_at = sa.Column(sa.DateTime, nullable=True)
+
+#     event_id = sa.Column(
+#         "event_id", sa.String, index=False, nullable=False, unique=True
+#     )
+#     status = sa.Column(sa.Enum("pending", "sent", "failed"), default="pending")
+#     processed_at = sa.Column("processed_at", sa.DateTime, nullable=True)
+#     retry = sa.Column("retry", sa.Integer, default=0)
 
 
 async def create_tables(engine: saio.AsyncEngine):
@@ -68,7 +85,7 @@ def event_to_mapping(event: IEvent) -> NormalizedEvent:
     return event.__normalized__()
 
 
-def mapping_to_event(row_mapping: Mapping[Any, Any]) -> Event:
+def mapping_to_event(row_mapping: Mapping[Any, Any]) -> IEvent:
     type_id = row_mapping["event_type"]
     event_cls = get_event_cls(type_id)
     mapping = {k: v for k, v in row_mapping.items() if k not in TABLE_RESERVED_VARS}

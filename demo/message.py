@@ -3,9 +3,7 @@ from functools import singledispatchmethod
 from typing import Self, Sequence
 from uuid import uuid4
 
-from fastapi import Query
-
-from anywise.events import Event, IEvent
+from anywise.messages import Event, IEvent
 
 
 # App Layer

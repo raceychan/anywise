@@ -1,9 +1,10 @@
 from collections import defaultdict
 from dataclasses import dataclass
+from types import ModuleType
 from typing import (
     Annotated,
-    AsyncGenerator,
     Any,
+    AsyncGenerator,
     Awaitable,
     Callable,
     Final,
@@ -34,6 +35,14 @@ type PublishStrategy = Callable[
 
 type LifeSpan = Callable[..., AsyncGenerator[Any, None]]
 
+
+class IPackage(Protocol):
+    def __path__(self) -> list[str]: ...
+
+
+type Registee = IPackage | ModuleType | type | CommandHandler | EventListener
+
+
 class IGuard(Protocol):
 
     @property
@@ -59,6 +68,7 @@ class FuncMeta[Message]:
     handler: Callable[..., Any]
     is_async: bool
     is_contexted: bool
+    ignore: tuple[str | type, ...]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

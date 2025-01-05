@@ -110,7 +110,9 @@ class ICommand:
     command_id: str
 
 
-class HttpSource: ...
+class HttpSource: 
+    "Uvicorn"
+    ...
 
 
 class KafkaSource: ...

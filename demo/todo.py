@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from sqlalchemy.sql import insert, select, update
 
 from anywise import Anywise, MessageRegistry, use
-from anywise.events import EventStore
+from anywise.messages import EventStore, NormalizedEvent
 
 from .message import (
     CreateTodo,
@@ -75,7 +75,7 @@ class TodoRepository:
 
 
 @registry
-async def list_events(query: ListTodoEvents, es: EventStore) -> list[dict[str, ty.Any]]:
+async def list_events(query: ListTodoEvents, es: EventStore) -> list[NormalizedEvent]:
     events = await es.list_events(query.todo_id)
     return [e.__normalized__() for e in events]
 

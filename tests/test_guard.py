@@ -3,7 +3,8 @@ import typing as ty
 from loguru import logger
 
 from anywise import Anywise, BaseGuard, IContext, MessageRegistry
-from tests.conftest import CreateUser, UpdateUser, UserCommand
+from anywise.sink import InMemorySink
+from tests.conftest import CreateUser, UpdateUser, UserCommand, UserCreated
 
 user_registry = MessageRegistry(command_base=UserCommand)
 
@@ -25,6 +26,7 @@ class LogginGuard(BaseGuard):
                 response = await super().__call__(command, context)
             except Exception as exc:
                 logger.error(exc)
+                raise
             else:
                 logger.success(
                     f"Logging request: {request_id}, got response `{response}`"
@@ -62,8 +64,9 @@ async def timer(command: CreateUser, context: IContext) -> None:
 
 
 @user_registry
-async def handler_create(create_user: CreateUser, context: TimeContext):
+async def handler_create(create_user: CreateUser, context: TimeContext, anywise: Anywise):
     assert context["processed_by"] == ["1", "2"]
+    await anywise.publish(UserCreated(create_user.user_name))
     return "created"
 
 
@@ -80,6 +83,6 @@ async def post[R](create_user: CreateUser, context: IContext, response: R) -> R:
 
 
 async def test_guard():
-    aw = Anywise(user_registry)
+    aw = Anywise(user_registry, sink=InMemorySink())
     await aw.send(CreateUser("1", "2"))
     await aw.send(UpdateUser("1", "2", "3"))

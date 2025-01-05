@@ -8,8 +8,6 @@ from ididi import DependencyGraph, INode, INodeConfig
 
 from ._itypes import (
     MISSING,
-    CommandHandler,
-    EventListener,
     FuncMeta,
     HandlerMapping,
     IGuard,
@@ -29,28 +27,6 @@ type GuardMapping = defaultdict[type, list[GuardMeta]]
 class GuardMeta:
     guard_target: type
     guard: IGuard | type[IGuard]
-
-
-def register(message_or_func: type | EventListener | CommandHandler):
-    """
-    @register(UserCommand)
-    class UserService:
-        ...
-
-    we don't need a base command for function handler
-
-    @register
-    async def create_user(command: CreateUser, context: dict[str, Any]):
-        ...
-
-    """
-    if isinstance(message_or_func, type):
-
-        def cls_receiver(service_cls: type):
-            return service_cls
-
-        return cls_receiver
-    return message_or_func
 
 
 # TODO: Guard Registry
@@ -88,6 +64,9 @@ class MessageRegistry[C, E]:
         self.event_mapping: ListenerMapping[Any] = {}
 
         self.guard_mapping: GuardMapping = defaultdict(list)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(command_base={self._command_base}, event_base={self._event_base})"
 
     @overload
     def __call__[T](self, handler: type[T]) -> type[T]: ...
@@ -159,6 +138,7 @@ class MessageRegistry[C, E]:
         for msg_type, metas in event_mapping.items():
             if msg_type not in self.event_mapping:
                 self.event_mapping[msg_type] = list()
+
             for i, meta in enumerate(metas):
                 if isinstance(meta, MethodMeta):
                     self._graph.node(ignore=msg_type)(meta.owner_type)
@@ -224,7 +204,7 @@ class MessageRegistry[C, E]:
             for post_handle in post_handles:
                 self.post_handle(post_handle)
 
-    # separate guard registry from message registry
+    # TODO? separate guard registry from message registry
     def _extra_guardfunc_annotation(self, func: Callable[..., Any]) -> type:
         if isinstance(func, type):
             f = func.__call__
@@ -275,4 +255,3 @@ class MessageRegistry[C, E]:
     #             response = await self._next_guard
     #             # do something after
     #     """
-

@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 from sqlalchemy.ext import asyncio as saio
 
-from anywise.events.table import TableBase
+from anywise.messages.table import TableBase
 
 
 class TodoTable(TableBase):

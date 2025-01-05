@@ -2,7 +2,8 @@ from asyncio import to_thread
 from collections import defaultdict
 from functools import partial
 from types import MappingProxyType, MethodType
-from typing import Any, AsyncGenerator, Awaitable, Callable, cast
+from typing import Any, Awaitable, Callable, cast
+from weakref import ref
 
 from ididi import AsyncScope, DependencyGraph
 
@@ -14,8 +15,8 @@ from ._itypes import (
     IContext,
     IGuard,
     PublishStrategy,
+    Registee,
     SendStrategy,
-    LifeSpan
 )
 from ._registry import (
     GuardMapping,
@@ -27,6 +28,10 @@ from ._registry import (
 )
 from ._visitor import gather_commands
 from .errors import UnregisteredMessageError
+from .messages import IEvent
+from .sink import IEventSink
+
+# from warnings import warn
 
 
 async def default_send(
@@ -44,6 +49,7 @@ async def default_publish(
 ) -> None:
     if context is None:
         context = MappingProxyType({})
+
     for listener in listeners:
         await listener(message, context)
 
@@ -59,10 +65,6 @@ class InjectMixin:
     def __init__(self, dg: DependencyGraph):
         self._dg = dg
 
-    def entry(self, message_type: type, func: Callable[..., Any]):
-        ignore = (message_type, "context")
-        return self._dg.entry(ignore=ignore)(func)
-
     async def _resolve_meta(self, meta: "FuncMeta[Any]", *, scope: AsyncScope):
         handler = meta.handler
 
@@ -73,7 +75,7 @@ class InjectMixin:
             instance = await scope.resolve(meta.owner_type)
             handler = MethodType(handler, instance)
         else:
-            handler = self.entry(meta.message_type, handler)
+            handler = self._dg.entry(ignore=meta.ignore)(handler)
 
         if not meta.is_contexted:
             handler = context_wrapper(handler)
@@ -97,6 +99,7 @@ class HandlerManager(InjectMixin):
             if origin_target is Any or origin_target is object:
                 self._global_guard.extend(guard_meta)
             else:
+                # TODO: move it to guard registry
                 drived_targets = gather_commands(origin_target)
                 for target in drived_targets:
                     self._guard_mapping[target].extend(guard_meta)
@@ -128,6 +131,14 @@ class HandlerManager(InjectMixin):
         guards[-1].chain_next(handler)
         return guards[0]
 
+    def get_handler(self, msg_type: type) -> CommandHandler | None:
+        try:
+            meta = self._handler_metas[msg_type]
+        except KeyError:
+            return None
+        else:
+            return meta.handler
+
     async def resolve_handler(self, msg_type: type, scope: AsyncScope):
         try:
             meta = self._handler_metas[msg_type]
@@ -144,7 +155,7 @@ class HandlerManager(InjectMixin):
 class ListenerManager(InjectMixin):
     def __init__(self, dg: DependencyGraph):
         super().__init__(dg)
-        self._listener_metas: defaultdict[type, list[FuncMeta[Any]]] = defaultdict(list)
+        self._listener_metas: dict[type, list[FuncMeta[Any]]] = dict()
 
     def include_listeners(self, event_mapping: ListenerMapping[Any]):
         listener_mapping = {
@@ -152,25 +163,58 @@ class ListenerManager(InjectMixin):
             for msg_type, metas in event_mapping.items()
         }
         for msg_type, metas in listener_mapping.items():
-            self._listener_metas[msg_type].extend(metas)
+            if msg_type not in self._listener_metas:
+                self._listener_metas[msg_type] = metas
+            else:
+                self._listener_metas[msg_type].extend(metas)
 
-    async def get_listener(
+    def get_listeners(self, msg_type: type) -> EventListeners:
+        try:
+            listener_metas = self._listener_metas[msg_type]
+        except KeyError:
+            return []
+        else:
+            return [meta.handler for meta in listener_metas]
+
+    async def resolve_listeners(
         self, msg_type: type, *, scope: AsyncScope
     ) -> EventListeners:
         try:
             listener_metas = self._listener_metas[msg_type]
         except KeyError:
             raise UnregisteredMessageError(msg_type)
+        else:
+            resolved_listeners = [
+                await self._resolve_meta(meta, scope=scope) for meta in listener_metas
+            ]
+            return resolved_listeners
 
-        resolved_listeners = [
-            await self._resolve_meta(meta, scope=scope) for meta in listener_metas
-        ]
-        return resolved_listeners
+
+class Inspect:
+    """
+    a util class for inspecting anywise
+    """
+
+    def __init__(self, aw: "Anywise"):
+        self._aw = ref(aw)
+
+    def __getitem__(self, key: type) -> CommandHandler | EventListeners | None:
+        aw = self._aw()
+
+        if aw is None:
+            raise Exception(f"{self.__class__.__name__} should not outlive anywise")
+
+        if handler := aw.handler_manager.get_handler(key):
+            return handler
+
+        if listeners := aw.listener_manager.get_listeners(key):
+            return listeners
 
 
 class Anywise(InjectMixin):
     """
-    ## Args:
+
+    - dependency_graph: `DependencyGraph`
 
     - send_strategy: `Callable[[Any, MutableMapping[Any, Any], CommandHandler], Any]`
 
@@ -186,6 +230,7 @@ class Anywise(InjectMixin):
             for listener in listeners:
                 await listener(msg, context)
         ```
+
     """
 
     _sender: SendStrategy
@@ -195,68 +240,99 @@ class Anywise(InjectMixin):
         self,
         *registries: MessageRegistry[Any, Any],
         dependency_graph: DependencyGraph | None = None,
-        lifespan: LifeSpan | None = None,
+        sink: IEventSink[IEvent] | None = None,
         sender: SendStrategy = default_send,
         publisher: PublishStrategy = default_publish,
     ):
         dependency_graph = dependency_graph or DependencyGraph()
         super().__init__(dependency_graph)
-
-        if lifespan:
-            self._lifespan = self._dg.entry(lifespan)
-        else:
-            self._lifespan = None
+        self.handler_manager = HandlerManager(self._dg)
+        self.listener_manager = ListenerManager(self._dg)
 
         self._sender = sender
         self._publisher = publisher
-        self._handler_manager = HandlerManager(self._dg)
-        self._listener_manager = ListenerManager(self._dg)
-        self._dg.register_dependent(self)
+        self._sink = sink
+        self._dg.register_singleton(self)
 
         self.include(*registries)
 
-    async def __enter__(self):
-        if self._lifespan is not None:
-            await anext(self._lifespan)
-        return self
+    # async def __enter__(self):
+    #     """create an global scope and create resource"""
+    #     # scope = self._dg.scope("anywise")
 
-    async def __aexit__(
-        self,
-        exc_type: type[Exception] | None,
-        exc: Exception | None,
-        exc_tb: Any | None,
-    ):
-        if self._lifespan:
-            await anext(self._lifespan)
+    # async def __aexit__(
+    #     self,
+    #     exc_type: type[Exception] | None,
+    #     exc: Exception | None,
+    #     exc_tb: Any | None,
+    # ): ...
+
+    def register(
+        self, message_type: type | None = None, registee: Registee | None = None
+    ) -> None:
+        """
+        register a function, a class, a module, or a package.
+
+        anywise.register(create_user)
+        anywise.register(UserCommand, UserService)
+        anywise.register(UserCommand, user_service) # module / package
+
+        NOTE: a package is a module with __path__ attribute
+        """
+
+    @property
+    def inspect(self) -> Inspect:
+        return Inspect(self)
 
     def register_singleton(self, singleton: Any):
-        self._dg.register_dependent(singleton)
+        self._dg.register_singleton(singleton)
 
     def include(self, *registries: MessageRegistry[Any, Any]) -> None:
         for msg_registry in registries:
             self._dg.merge(msg_registry.graph)
-            self._handler_manager.include_handlers(msg_registry.command_mapping)
-            self._handler_manager.include_guards(msg_registry.guard_mapping)
-            self._listener_manager.include_listeners(msg_registry.event_mapping)
+            self.handler_manager.include_handlers(msg_registry.command_mapping)
+            self.handler_manager.include_guards(msg_registry.guard_mapping)
+            self.listener_manager.include_listeners(msg_registry.event_mapping)
         self._dg.static_resolve_all()
 
     def scope(self, name: str | None = None):
         return self._dg.scope(name)
 
     async def send(self, msg: object, *, context: IContext | None = None) -> Any:
-        scope_proxy = self._dg.use_scope(create_on_miss=True, as_async=True)
+        # TODO: msg, context, scope
+        scope_proxy = self._dg.use_scope("message", create_on_miss=True, as_async=True)
 
         async with scope_proxy as scope:
-            handler = await self._handler_manager.resolve_handler(type(msg), scope)
+            handler = await self.handler_manager.resolve_handler(type(msg), scope)
             return await self._sender(msg, context, handler)
 
     async def publish(
         self, msg: object, *, context: EventContext | None = None
     ) -> None:
-        scope_proxy = self._dg.use_scope(create_on_miss=True, as_async=True)
+        scope_proxy = self._dg.use_scope("message", create_on_miss=True, as_async=True)
 
         async with scope_proxy as scope:
-            resolved_listeners = await self._listener_manager.get_listener(
+            resolved_listeners = await self.listener_manager.resolve_listeners(
                 type(msg), scope=scope
             )
             return await self._publisher(msg, context, resolved_listeners)
+
+    async def sink(self, event: Any):
+        if self._sink is None:
+            raise Exception("sink is not set")
+        await self._sink.sink(event)
+
+
+"""
+
+def source_factory():
+    anywise = Anywise()
+    source = KafkaSource(
+        anywise=anywise
+    )
+
+
+```bash
+anywise main.source_factory
+```
+"""

@@ -1,10 +1,8 @@
 # Tutorial
 
-## Register Command handler and Event Listeners
+## Message Registry
 
-### Use MessageRegistry to decorate / register a function or a class as handlers of a command
-
-use `MessageRegistry` to decorate / register a function as a handler of a command.
+Use `MessageRegistry` to decorate / register a function as a handler of a command.
 
 ```py
 from anywise import MessageRegistry
@@ -14,7 +12,7 @@ registry = MessageRegistry(command_base=UserCommand)
 registry.register(hanlder_func)
 ```
 
-#### use `registry.factory` to declear how a dependency should be resolved
+Use `registry.factory` to declear how a dependency should be resolved
 
 ```py
 @registry.factory
@@ -30,7 +28,9 @@ async def conn(engine=use(engine_factory)) -> AsyncGenerator[AsyncConnection, No
 
 checkout [ididi-github](https://github.com/raceychan/ididi) for more details
 
-#### Command handler
+## Command
+
+### Command handler
 
 a handler `h` for command `c` can be either a method or a function
 
@@ -53,38 +53,6 @@ class UserService:
 
 - Function/Method that declear a subclass of the command base in its signature will be treated as a handler to that command and its subcommand.
 - If two or more handlers that handle the same command are registered, only the lastly registered one will be used.
-
-#### Event listeners
-
-- same register rule, but each event can have multiple listeners
-- event listener can declear `context` in its signature, if so, a immutable `context` object will be shared between listeners.
-- event handler is supposed to return `None`, if it returns a value, it will be ignored.
-
-```py
-registry = MessageRegistry(event_base=UserEvent)
-@registry
-async def notify_user(event: UserCreated, context: Mapping[str, Any], email: EmailSender) -> None:
-    await email.greet_user(event.user_name, event.user_email)
-
-@registry
-async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService) -> None:
-    await payment.validte_user_payment(event.user_name, event.user_email)
-```
-
-### Provide Startegy to alter send and publish behavior
-
-- Provide an async callble `SendStrategy` or `PublishStrategy` to change the default behavior of how anywise send or publish message
-- You might provide strategy like a class with dependencies and async def __call__ for more advanced usage.
-
-```py
-from anywise import Anywise, MessageRegistry, concurrent_publish, EventListeners
-
-anywise = Anywise(user_message_registry, publisher=concurrent_publish)
-
-# now all event listeners that listen to type(event) will be called concurrently
-await anywise.publish(event) 
-
-```
 
 ### Command Guard
 
@@ -192,4 +160,49 @@ user_registry.add_guard(LogginGuard(logger=logger), targets=[UserCommand])
 
 # or the LoggingGuard class, which will be dynamically injected during anywise.send
 user_registry.add_guard(LogginGuard, targets=[UserCommand])
+```
+
+## Event
+
+## Event Listeners
+
+- same register rule, but each event can have multiple listeners
+- event listener can declear `context` in its signature, if so, a immutable `context` object will be shared between listeners.
+- event handler is supposed to return `None`, if it returns a value, it will be ignored.
+
+```py
+registry = MessageRegistry(event_base=UserEvent)
+@registry
+async def notify_user(event: UserCreated, context: Mapping[str, Any], email: EmailSender) -> None:
+    await email.greet_user(event.user_name, event.user_email)
+
+@registry
+async def validate_payment(event: UserCreated, context: Mapping[str, Any], payment: PaymentService) -> None:
+    await payment.validte_user_payment(event.user_name, event.user_email)
+```
+
+### Provide Startegy to alter send and publish behavior
+
+- Provide an async callble `SendStrategy` or `PublishStrategy` to change the default behavior of how anywise send or publish message
+- You might provide strategy like a class with dependencies and async def __call__ for more advanced usage.
+
+```py
+from anywise import Anywise, MessageRegistry, concurrent_publish, EventListeners
+
+anywise = Anywise(user_message_registry, publisher=concurrent_publish)
+
+# now all event listeners that listen to type(event) will be called concurrently
+await anywise.publish(event) 
+```
+
+## Inspect
+
+anywise provide a simple api for inspection, make debugging easy.
+
+Use `Anywise.inspect` to inspect registered handler / listeners
+
+```py
+print(anywise.inspect[UserCreated])
+
+>>> [<function react_to_event at 0x7fe032786020>]
 ```
