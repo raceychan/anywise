@@ -38,6 +38,9 @@ type PublishStrategy = Callable[
 type LifeSpan = Callable[..., AsyncGenerator[Any, None]]
 
 
+type AnnContext[M] = Annotated[M, "__context__"]
+
+
 class IPackage(Protocol):
     def __path__(self) -> list[str]: ...
 

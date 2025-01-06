@@ -1,5 +1,8 @@
+import pytest
+
 from anywise import Anywise, MessageRegistry
-from tests.conftest import (  # CreateUser,; RemoveUser,; UpdateUser,
+from anywise.errors import InvalidHandlerError
+from tests.conftest import (
     CreateUser,
     RemoveUser,
     UserCommand,
@@ -13,6 +16,9 @@ user_message_registry = MessageRegistry(event_base=UserEvent, command_base=UserC
 
 async def react_to_event(event: UserCreated | UserNameUpdated) -> None:
     print(f"handling {event=}")
+
+
+async def random_func(cmd: str): ...
 
 
 class UserService:
@@ -36,5 +42,8 @@ def test_message_registry():
     user_message_registry.register_all(react_to_event, UserService)
     assert user_message_registry.event_mapping[UserNameUpdated]
     assert user_message_registry.command_mapping[CreateUser]
-    # anywise = Anywise(user_message_registry)
 
+
+def test_message_register_fail():
+    with pytest.raises(InvalidHandlerError):
+        user_message_registry.register(random_func)

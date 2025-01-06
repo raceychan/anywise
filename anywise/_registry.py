@@ -218,13 +218,11 @@ class MessageRegistry[C, E]:
             self._register_eventlisteners(handler)
         return handler
 
-    def register_all[
-        **P, R
-    ](
+    def register_all(
         self,
-        *handlers: Callable[P, R],
+        *handlers: Callable[..., Any],
         pre_hanldes: list[GuardFunc] | None = None,
-        post_handles: list[PostHandle[R]] | None = None,
+        post_handles: list[PostHandle[Any]] | None = None,
     ) -> None:
         for handler in handlers:
             self.register(handler)
@@ -239,18 +237,14 @@ class MessageRegistry[C, E]:
 
     # TODO? separate guard registry from message registry
     def _extra_guardfunc_annotation(self, func: Callable[..., Any]) -> type:
-        if isinstance(func, type):
-            f = func.__call__
-            command_index = 1
+        if inspect.isclass(func):
+            func_params = list(inspect.signature(func.__call__).parameters.values())
+            cmd_type = func_params[1].annotation
+        elif inspect.isfunction(func):
+            func_params = list(inspect.signature(func).parameters.values())
+            cmd_type = func_params[0].annotation
         else:
-            f = func
-            command_index = 0
-
-        func_params = list(inspect.signature(f).parameters.values())
-        try:
-            cmd_type = func_params[command_index].annotation
-        except IndexError:
-            raise Exception("can't extract command type from annotation")
+            raise MessageHandlerNotFoundError(self._command_base, func)
         return cmd_type
 
     def pre_handle(self, func: GuardFunc) -> GuardFunc:

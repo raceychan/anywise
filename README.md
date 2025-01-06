@@ -45,18 +45,33 @@ registry = MessageRegistry(command_base=UserCommand, event_base=UserEvent)
 
 @registry 
 async def create_user(
-     command: CreateUser, 
-     anywise: Anywise, 
-     service: UserService = use(user_service_factory)
+    command: CreateUser, 
+    anywise: Anywise, 
+    service: UserService = use(user_service_factory)
 ):
     await users.signup(command.username, command.user_email)
     await anywise.publish(UserCreated(command.username, command.user_email))
 
 @registry
 async def notify_user(event: UserCreated, service: EmailSender):
-     await service.send_greeting(command.user_email)
+    await service.send_greeting(command.user_email)
 
+@reigstry
+class ProductService:
+    def __init__(self, repo: ProductRepository, aw: Anywise):
+        self._repo = repo
+        self._aw = aw
 
+    async def add_item(self, command: AddItem):
+        item = Item(sku=command.sku, name="item")
+        await self._repo.add(item)
+        await self._aw.publish(ItemAdded(sku=item.sku, name=item.name))
+
+    async def on_item_added(self, event: ItemAdded):
+        product = await self._repo.get(event.sku)
+        if len(product.items) >= 1:
+            product.status = "available"
+        await self._repo.update(prodct)
 ```
 
 you can use `registry` as a decorator to register handler/listeners

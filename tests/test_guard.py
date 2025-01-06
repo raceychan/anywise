@@ -4,7 +4,7 @@ from loguru import logger
 
 from anywise import Anywise, BaseGuard, IContext, MessageRegistry
 from anywise.sink import InMemorySink
-from tests.conftest import CreateUser, UpdateUser, UserCommand, UserCreated
+from tests.conftest import CreateUser, UpdateUser, UserCommand
 
 user_registry = MessageRegistry(command_base=UserCommand)
 
@@ -37,10 +37,6 @@ class LogginGuard(BaseGuard):
 user_registry.add_guards(LogginGuard)
 
 
-class ITest(ty.TypedDict):
-    processed_by: list[str]
-
-
 @user_registry.pre_handle
 async def mark(command: UserCommand, context: IContext) -> None:
     if not context.get("processed_by"):
@@ -48,11 +44,9 @@ async def mark(command: UserCommand, context: IContext) -> None:
     else:
         context["processed_by"].append("1")
 
-    print(f"\n in guard, {command=}")
 
-
-# class TimeContext(ty.TypedDict):
-#     processed_by: list[str]
+class TimeContext(ty.TypedDict):
+    processed_by: list[str]
 
 
 @user_registry.pre_handle
@@ -64,14 +58,13 @@ async def timer(command: CreateUser, context: IContext) -> None:
 
 
 @user_registry
-async def handler_create(create_user: CreateUser, context: dict, anywise: Anywise):
+async def handler_create(_: CreateUser, context: TimeContext, anywise: Anywise):
     assert context["processed_by"] == ["1", "2"]
-    # await anywise.publish(UserCreated(create_user.user_name))
     return "created"
 
 
 @user_registry
-async def handler_update(update_user: UpdateUser, context: dict):
+async def handler_update(update_user: UpdateUser, context: TimeContext):
     assert context["processed_by"]
     return "updated"
 

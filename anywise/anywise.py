@@ -75,7 +75,8 @@ class InjectMixin:
             instance = await scope.resolve(meta.owner_type)
             handler = MethodType(handler, instance)
         else:
-            handler = self._dg.entry(ignore=meta.ignore)(handler)
+            ignore = ("context",) + meta.ignore
+            handler = self._dg.entry(ignore=ignore)(handler)
 
         if not meta.is_contexted:
             handler = context_wrapper(handler)
