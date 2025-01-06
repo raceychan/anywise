@@ -14,6 +14,7 @@ from ._itypes import (
     FuncMeta,
     IContext,
     IGuard,
+    MethodMeta,
     PublishStrategy,
     Registee,
     SendStrategy,
@@ -24,9 +25,8 @@ from ._registry import (
     HandlerMapping,
     ListenerMapping,
     MessageRegistry,
-    MethodMeta,
 )
-from ._visitor import gather_commands
+from ._visitor import gather_types
 from .errors import UnregisteredMessageError
 from .messages import IEvent
 from .sink import IEventSink
@@ -100,7 +100,7 @@ class HandlerManager(InjectMixin):
                 self._global_guard.extend(guard_meta)
             else:
                 # TODO: move it to guard registry
-                drived_targets = gather_commands(origin_target)
+                drived_targets = gather_types(origin_target)
                 for target in drived_targets:
                     self._guard_mapping[target].extend(guard_meta)
 

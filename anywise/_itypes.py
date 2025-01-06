@@ -1,3 +1,5 @@
+"Interface, types, type alias, and related stuff"
+
 from collections import defaultdict
 from dataclasses import dataclass
 from types import ModuleType

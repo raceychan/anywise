@@ -16,11 +16,80 @@ from ._itypes import (
     MethodMeta,
     Missed,
 )
-from ._visitor import Target, collect_handlers, collect_listeners
-from .errors import MessageHandlerNotFoundError
+from ._visitor import Target, gather_types
+from .errors import (
+    HandlerRegisterFailError,
+    InvalidMessageAnnotationError,
+    MessageHandlerNotFoundError,
+    NotSupportedHandlerTypeError,
+)
 from .guard import Guard, GuardFunc, PostHandle
 
 type GuardMapping = defaultdict[type, list[GuardMeta]]
+
+
+def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any]]:
+    params = inspect.Signature.from_callable(func).parameters.values()
+    if not params:
+        raise MessageHandlerNotFoundError(msg_base, func)
+
+    msg, *rest = params
+    is_async: bool = inspect.iscoroutinefunction(func)
+    is_contexted: bool = bool(rest) and rest[0].name == "context"
+    derived_msgtypes = gather_types(msg.annotation)
+
+    for msg_type in derived_msgtypes:
+        if not issubclass(msg_type, msg_base):
+            raise InvalidMessageAnnotationError(msg_base, msg_type, func)
+
+    metas = [
+        FuncMeta[Any](
+            message_type=t,
+            handler=func,
+            is_async=is_async,
+            is_contexted=is_contexted,
+            ignore=tuple(derived_msgtypes),
+        )
+        for t in derived_msgtypes
+    ]
+    return metas
+
+
+def get_methodmetas(msg_base: type, cls: type) -> list[MethodMeta[Any]]:
+    cls_members = inspect.getmembers(cls, predicate=inspect.isfunction)
+    method_metas: list[MethodMeta[Any]] = []
+    for name, func in cls_members:
+        if name.startswith("_"):
+            continue
+        params = inspect.Signature.from_callable(func).parameters.values()
+        if len(params) == 1:
+            continue
+
+        _, msg, *rest = params  # ignore `self`
+        is_async: bool = inspect.iscoroutinefunction(func)
+        is_contexted: bool = bool(rest) and rest[0].name == "context"
+        derived_msgtypes = gather_types(msg.annotation)
+
+        if not all(issubclass(msg_type, msg_base) for msg_type in derived_msgtypes):
+            continue
+
+        metas = [
+            MethodMeta[Any](
+                message_type=t,
+                handler=func,
+                is_async=is_async,
+                is_contexted=is_contexted,
+                ignore=tuple(derived_msgtypes),
+                owner_type=cls,
+            )
+            for t in derived_msgtypes
+        ]
+        method_metas.extend(metas)
+
+    if not method_metas:
+        raise MessageHandlerNotFoundError(msg_base, cls)
+
+    return method_metas
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -77,7 +146,6 @@ class MessageRegistry[C, E]:
     def __call__[
         **P, R
     ](self, handler: type[R] | Callable[P, R]) -> type[R] | Callable[P, R]:
-
         return self.register(handler)
 
     @property
@@ -109,47 +177,33 @@ class MessageRegistry[C, E]:
         if not self._command_base:
             return
 
-        try:
-            command_mapping = collect_handlers(self._command_base, handler)
-        except MessageHandlerNotFoundError:
-            command_mapping = {}
+        if inspect.isfunction(handler):
+            metas = get_funcmetas(self._command_base, handler)
+        elif inspect.isclass(handler):
+            metas = get_methodmetas(self._command_base, handler)
+        else:
+            raise NotSupportedHandlerTypeError(handler)
 
-        for msg_type, meta in command_mapping.items():
-            if isinstance(meta, MethodMeta):
-                self._graph.node(ignore=msg_type)(meta.owner_type)
-            else:
-                command_mapping[msg_type] = FuncMeta(
-                    message_type=msg_type,
-                    handler=meta.handler,
-                    is_async=meta.is_async,
-                    is_contexted=meta.is_contexted,
-                )
-        self.command_mapping.update(command_mapping)
+        mapping = {meta.message_type: meta for meta in metas}
+        self.command_mapping.update(mapping)
 
-    def _register_eventlisteners(self, listeners: Target) -> None:
+    def _register_eventlisteners(self, listener: Target) -> None:
         if not self._event_base:
             return
 
-        try:
-            event_mapping = collect_listeners(self._event_base, listeners)
-        except MessageHandlerNotFoundError:
-            event_mapping = {}
+        if inspect.isfunction(listener):
+            metas = get_funcmetas(self._event_base, listener)
+        elif inspect.isclass(listener):
+            metas = get_methodmetas(self._event_base, listener)
+        else:
+            raise NotSupportedHandlerTypeError(listener)
 
-        for msg_type, metas in event_mapping.items():
+        for meta in metas:
+            msg_type = meta.message_type
             if msg_type not in self.event_mapping:
-                self.event_mapping[msg_type] = list()
-
-            for i, meta in enumerate(metas):
-                if isinstance(meta, MethodMeta):
-                    self._graph.node(ignore=msg_type)(meta.owner_type)
-                else:
-                    metas[i] = FuncMeta(
-                        message_type=msg_type,
-                        handler=meta.handler,
-                        is_async=meta.is_async,
-                        is_contexted=meta.is_contexted,
-                    )
-            self.event_mapping[msg_type].extend(metas)
+                self.event_mapping[msg_type] = [meta]
+            else:
+                self.event_mapping[msg_type].append(meta)
 
     @overload
     def register[T](self, handler: type[T]) -> type[T]: ...
@@ -158,31 +212,10 @@ class MessageRegistry[C, E]:
     def register[**P, R](self, handler: Callable[P, R]) -> Callable[P, R]: ...
 
     def register(self, handler: Target):
-        """
-        a helper function to register a function handler, or method handlers within a class.
-
-        Usage
-        ---
-
-        - register a class, method with subclass of command_base type will be registered
-
-        ```py
-        registry=MessageRegistry(command_base=Command, event_base=Event)
-
-        @registry
-        class UserService:
-            async def signup(self, command: CreateUser)
-        ```
-
-        - register a function, it should declear which command it handles in its signature.
-
-        ```py
-        @register
-        async def signup_user(command: CreateUser): ...
-        ```
-        """
-        self._register_commandhanlders(handler)
-        self._register_eventlisteners(handler)
+        try:
+            self._register_commandhanlders(handler)
+        except HandlerRegisterFailError:
+            self._register_eventlisteners(handler)
         return handler
 
     def register_all[

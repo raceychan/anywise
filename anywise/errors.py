@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Callable
 
 from ._itypes import IGuard
 
@@ -6,14 +6,23 @@ from ._itypes import IGuard
 class AnyWiseError(Exception): ...
 
 
-class MessageHandlerNotFoundError(AnyWiseError):
+class NotSupportedHandlerTypeError(AnyWiseError):
+    def __init__(self, handler: Any):
+        super().__init__(f"{handler} of type {type(handler)} is not supported")
+
+
+class HandlerRegisterFailError(AnyWiseError): ...
+
+
+class MessageHandlerNotFoundError(HandlerRegisterFailError):
     def __init__(self, base_type: Any, handler: Any):
-        super().__init__(
-            f"can't find param of type `{base_type}` in {handler} signature"
-        )
+        super().__init__(f"can't find param of type `{base_type}` in {handler}")
 
 
-class NotSupportedHandlerTypeError(AnyWiseError): ...
+class InvalidMessageAnnotationError(HandlerRegisterFailError):
+    def __init__(self, basetype: type, msg_type: type, handler: Callable[..., Any]):
+        msg = f"{handler} is receiving {msg_type}, which is not a valid subclass of {basetype}"
+        super().__init__(msg)
 
 
 class UnregisteredMessageError(AnyWiseError):

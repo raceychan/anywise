@@ -51,8 +51,8 @@ async def mark(command: UserCommand, context: IContext) -> None:
     print(f"\n in guard, {command=}")
 
 
-class TimeContext(ty.TypedDict):
-    processed_by: list[str]
+# class TimeContext(ty.TypedDict):
+#     processed_by: list[str]
 
 
 @user_registry.pre_handle
@@ -64,14 +64,14 @@ async def timer(command: CreateUser, context: IContext) -> None:
 
 
 @user_registry
-async def handler_create(create_user: CreateUser, context: TimeContext, anywise: Anywise):
+async def handler_create(create_user: CreateUser, context: dict, anywise: Anywise):
     assert context["processed_by"] == ["1", "2"]
-    await anywise.publish(UserCreated(create_user.user_name))
+    # await anywise.publish(UserCreated(create_user.user_name))
     return "created"
 
 
 @user_registry
-async def handler_update(update_user: UpdateUser, context: TimeContext):
+async def handler_update(update_user: UpdateUser, context: dict):
     assert context["processed_by"]
     return "updated"
 
