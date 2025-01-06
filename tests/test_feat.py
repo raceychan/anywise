@@ -1,43 +1,24 @@
-import pytest
+from typing import TypedDict
 
-from anywise._registry import get_funcmetas, get_methodmetas
-from anywise.errors import InvalidHandlerError
-from tests.conftest import CreateUser, UpdateUser, UserCommand
+from anywise import Anywise, MessageRegistry
+from anywise._itypes import EventContext
 
+from .conftest import CreateUser, UserCommand
 
-async def update_user(cmd: UpdateUser | CreateUser) -> str:
-    return "ok"
-
-
-def test_invalid_handler():
-
-    def test(name: str): ...
-
-    with pytest.raises(InvalidHandlerError):
-        get_funcmetas(UserCommand, test)
+reg = MessageRegistry(command_base=UserCommand)
 
 
-class UserService:
-    def __init__(self):
-        self._name = "service"
-
-    @property
-    def name(self):
-        return self._name
-
-    def hello(self):
-        return "hello"
-
-    def create_user(self, command: CreateUser): ...
+class Time(TypedDict):
+    name: str
 
 
-def test_get_funcmetas():
-    results = get_funcmetas(msg_base=UserCommand, func=update_user)
-    assert len(results) == 2
-    assert results[0].handler == results[1].handler == update_user
+async def signup(cmd: CreateUser, ctx: EventContext[Time]):
+    assert isinstance(ctx, dict)
 
 
-def test_get_methodmetas():
-    metas = get_methodmetas(UserCommand, UserService)
-    assert len(metas) == 1
-    assert metas[0].handler is UserService.create_user
+async def test_ctx():
+    reg.register(signup)
+
+    aw = Anywise(reg)
+
+    await aw.send(CreateUser("1", "2"))

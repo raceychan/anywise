@@ -1,8 +1,6 @@
-import typing as ty
-
 from loguru import logger
 
-from anywise import Anywise, BaseGuard, IContext, MessageRegistry
+from anywise import Anywise, BaseGuard, Context, IContext, MessageRegistry
 from anywise.sink import InMemorySink
 from tests.conftest import CreateUser, UpdateUser, UserCommand
 
@@ -41,10 +39,6 @@ async def mark(command: UserCommand, context: IContext) -> None:
         context["processed_by"].append("1")
 
 
-class TimeContext(ty.TypedDict):
-    processed_by: list[str]
-
-
 async def timer(command: CreateUser, context: IContext) -> None:
     if not context.get("processed_by"):
         context["processed_by"] = ["2"]
@@ -52,12 +46,14 @@ async def timer(command: CreateUser, context: IContext) -> None:
         context["processed_by"].append("2")
 
 
-async def handler_create(_: CreateUser, context: TimeContext, anywise: Anywise):
+async def handler_create(
+    _: CreateUser, context: Context[dict[str, str]], anywise: Anywise
+):
     assert context["processed_by"] == ["1", "2"]
     return "created"
 
 
-async def handler_update(update_user: UpdateUser, context: TimeContext):
+async def handler_update(update_user: UpdateUser, context: Context[dict[str, str]]):
     assert context["processed_by"]
     return "updated"
 

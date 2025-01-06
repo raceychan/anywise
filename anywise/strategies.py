@@ -1,11 +1,11 @@
 from asyncio import TaskGroup
 from typing import Any
 
-from .anywise import EventContext, EventListeners
+from .anywise import EventListeners, IEventContext
 
 
 async def concurrent_publish(
-    msg: Any, context: EventContext | None, subscribers: EventListeners
+    msg: Any, context: IEventContext | None, subscribers: EventListeners
 ) -> None:
     if not context:
         context = {}

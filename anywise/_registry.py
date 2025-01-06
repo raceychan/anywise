@@ -1,14 +1,17 @@
 import inspect
 from collections import defaultdict
-from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Unpack, cast, overload
 
 from ididi import DependencyGraph, INode, INodeConfig
 
 from ._itypes import (
+    CTX_MARKER,
     MISSING,
+    Context,
+    EventContext,
     FuncMeta,
+    GuardMeta,
     HandlerMapping,
     IGuard,
     ListenerMapping,
@@ -28,6 +31,23 @@ from .guard import BaseGuard, Guard, GuardFunc, PostHandle
 type GuardMapping = defaultdict[type, list[GuardMeta]]
 
 
+IGNORE_TYPES = (Context, EventContext)
+
+
+def is_contextparam(param: list[inspect.Parameter]) -> bool:
+    if not param:
+        return False
+
+    param_type = param[0].annotation
+
+    v = getattr(param_type, "__value__", None)
+    if not v:
+        return False
+
+    metas = getattr(v, "__metadata__", [])
+    return CTX_MARKER in metas
+
+
 def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any]]:
     params = inspect.Signature.from_callable(func).parameters.values()
     if not params:
@@ -35,12 +55,14 @@ def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any
 
     msg, *rest = params
     is_async: bool = inspect.iscoroutinefunction(func)
-    is_contexted: bool = bool(rest) and rest[0].name == "context"
+    is_contexted: bool = is_contextparam(rest)
     derived_msgtypes = gather_types(msg.annotation)
 
     for msg_type in derived_msgtypes:
         if not issubclass(msg_type, msg_base):
             raise InvalidHandlerError(msg_base, msg_type, func)
+
+    ignore = tuple(derived_msgtypes) + IGNORE_TYPES
 
     metas = [
         FuncMeta[Any](
@@ -48,7 +70,7 @@ def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any
             handler=func,
             is_async=is_async,
             is_contexted=is_contexted,
-            ignore=tuple(derived_msgtypes),
+            ignore=ignore,
         )
         for t in derived_msgtypes
     ]
@@ -67,11 +89,13 @@ def get_methodmetas(msg_base: type, cls: type) -> list[MethodMeta[Any]]:
 
         _, msg, *rest = params  # ignore `self`
         is_async: bool = inspect.iscoroutinefunction(func)
-        is_contexted: bool = bool(rest) and rest[0].name == "context"
+        is_contexted: bool = is_contextparam(rest)
         derived_msgtypes = gather_types(msg.annotation)
 
         if not all(issubclass(msg_type, msg_base) for msg_type in derived_msgtypes):
             continue
+
+        ignore = tuple(derived_msgtypes) + IGNORE_TYPES
 
         metas = [
             MethodMeta[Any](
@@ -79,7 +103,7 @@ def get_methodmetas(msg_base: type, cls: type) -> list[MethodMeta[Any]]:
                 handler=func,
                 is_async=is_async,
                 is_contexted=is_contexted,
-                ignore=tuple(derived_msgtypes),
+                ignore=ignore,
                 owner_type=cls,
             )
             for t in derived_msgtypes
@@ -92,13 +116,6 @@ def get_methodmetas(msg_base: type, cls: type) -> list[MethodMeta[Any]]:
     return method_metas
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class GuardMeta:
-    guard_target: type
-    guard: IGuard | type[IGuard]
-
-
-# TODO: Guard Registry
 class MessageRegistry[C, E]:
     @overload
     def __init__(
@@ -216,6 +233,12 @@ class MessageRegistry[C, E]:
             self._register_commandhanlders(handler)
         except HandlerRegisterFailError:
             self._register_eventlisteners(handler)
+            return handler
+
+        try:
+            self._register_eventlisteners(handler)
+        except HandlerRegisterFailError:
+            pass
         return handler
 
     def register(
@@ -240,7 +263,7 @@ class MessageRegistry[C, E]:
                 self.post_handle(post_handle)
 
     # TODO? separate guard registry from message registry
-    def _extra_guardfunc_annotation(self, func: Callable[..., Any]) -> type:
+    def get_guardtarget(self, func: Callable[..., Any]) -> set[type]:
         if inspect.isclass(func):
             func_params = list(inspect.signature(func.__call__).parameters.values())
             cmd_type = func_params[1].annotation
@@ -249,40 +272,26 @@ class MessageRegistry[C, E]:
             cmd_type = func_params[0].annotation
         else:
             raise MessageHandlerNotFoundError(self._command_base, func)
-        return cmd_type
+
+        return gather_types(cmd_type)
 
     def pre_handle(self, func: GuardFunc) -> GuardFunc:
-        target = self._extra_guardfunc_annotation(func)
-        meta = GuardMeta(guard_target=target, guard=Guard(pre_handle=func))
-        self.guard_mapping[meta.guard_target].append(meta)
+        targets = self.get_guardtarget(func)
+        for target in targets:
+            meta = GuardMeta(guard_target=target, guard=Guard(pre_handle=func))
+            self.guard_mapping[target].append(meta)
         return func
 
     def post_handle[R](self, func: PostHandle[R]) -> PostHandle[R]:
-        target = self._extra_guardfunc_annotation(func)
-        meta = GuardMeta(guard_target=target, guard=Guard(post_handle=func))
-        self.guard_mapping[meta.guard_target].append(meta)
+        targets = self.get_guardtarget(func)
+        for target in targets:
+            meta = GuardMeta(guard_target=target, guard=Guard(post_handle=func))
+            self.guard_mapping[target].append(meta)
         return func
 
     def add_guards(self, *guards: IGuard | type[IGuard]) -> None:
         for guard in guards:
-            target = self._extra_guardfunc_annotation(guard)
-            meta = GuardMeta(guard_target=target, guard=guard)
-            self.guard_mapping[target].append(meta)
-
-    # def guard[
-    #     **P, R
-    # ](self, func_or_cls: IGuard | type[IGuard]) -> IGuard | type[IGuard]:
-    #     """
-    #     @registry.guard
-    #     async def guard_func(command: Command, context: IContext, next: GuardFunc):
-    #         # do something before
-    #         response = await next(command, context)
-    #         # do something after
-
-    #     @registry.guard
-    #     class LoggingGuard(BaseGuard):
-    #         async def __call__(self, command: Command, context: IContext):
-    #             # do something before
-    #             response = await self._next_guard
-    #             # do something after
-    #     """
+            targets = self.get_guardtarget(guard)
+            for target in targets:
+                meta = GuardMeta(guard_target=target, guard=guard)
+                self.guard_mapping[target].append(meta)

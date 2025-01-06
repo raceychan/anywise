@@ -1,6 +1,5 @@
 "Interface, types, type alias, and related stuff"
 
-from collections import defaultdict
 from dataclasses import dataclass
 from types import ModuleType
 from typing import (
@@ -19,26 +18,28 @@ from typing import (
 
 type HandlerMapping[Command] = dict[type[Command], "FuncMeta[Command]"]
 type ListenerMapping[Event] = dict[type[Event], list[FuncMeta[Event]]]
-type GuardMapping[Command] = defaultdict[type[Command], list[IGuard]]
 
 type IContext = MutableMapping[Any, Any]
 type GuardFunc = Callable[[Any, IContext], Awaitable[Any]]
 type PostHandle[R] = Callable[[Any, IContext, R], Awaitable[R]]
-type EventContext = Mapping[Any, Any]
+type IEventContext = Mapping[Any, Any]
 
 
 type CommandHandler = Callable[[Any, IContext], Any] | IGuard
-type EventListener = Callable[[Any, EventContext], Any]
+type EventListener = Callable[[Any, IEventContext], Any]
 type EventListeners = list[EventListener]
 type SendStrategy = Callable[[Any, IContext | None, CommandHandler], Any]
 type PublishStrategy = Callable[
-    [Any, EventContext | None, EventListeners], Awaitable[None]
+    [Any, IEventContext | None, EventListeners], Awaitable[None]
 ]
 
 type LifeSpan = Callable[..., AsyncGenerator[Any, None]]
 
 
-type AnnContext[M] = Annotated[M, "__context__"]
+CTX_MARKER = "__anywise_context__"
+
+type Context[M: MutableMapping[Any, Any]] = Annotated[M, CTX_MARKER]
+type EventContext[M: Mapping[Any, Any]] = Annotated[M, CTX_MARKER]
 
 
 class IPackage(Protocol):
@@ -80,6 +81,10 @@ class FuncMeta[Message]:
 class MethodMeta[Message](FuncMeta[Message]):
     owner_type: type
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GuardMeta:
+    guard_target: type
+    guard: IGuard | type[IGuard]
 
 type Result[R, E] = Annotated[R, E]
 """

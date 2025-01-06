@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any
 
 from ._itypes import GuardFunc, IContext, PostHandle
@@ -50,7 +50,6 @@ async def get_current_user(aut_repo: AuthRepo, jwt_token: str) -> User:
 """
 
 
-# TODO: should be parent class of Guard
 class BaseGuard(ABC):
     """
     An abstract class for advanced user-defined guard.

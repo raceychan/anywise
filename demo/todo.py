@@ -1,9 +1,10 @@
 import typing as ty
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 from sqlalchemy.sql import insert, select, update
 
-from anywise import Anywise, MessageRegistry, use
+from anywise import Anywise, MessageRegistry
 from anywise.messages import EventStore, NormalizedEvent
 
 from .message import (
@@ -23,15 +24,15 @@ from .table import TodoTable
 
 registry = MessageRegistry(command_base=TodoCommand, event_base=TodoEvent)
 
-from loguru import logger
 
-
+@registry.factory
 def engine_factory() -> AsyncEngine:
     url = "sqlite+aiosqlite:///demo/db.db"
     logger.success("engine created")
     return create_async_engine(url)
 
 
+@registry.factory
 async def trans_conn(engine: AsyncEngine) -> ty.AsyncGenerator[AsyncConnection, None]:
     logger.success("conn created")
     async with engine.begin() as conn:
@@ -39,7 +40,7 @@ async def trans_conn(engine: AsyncEngine) -> ty.AsyncGenerator[AsyncConnection, 
 
 
 class TodoRepository:
-    def __init__(self, engine: AsyncEngine = use(engine_factory)):
+    def __init__(self, engine: AsyncEngine):
         self._engine = engine
 
     async def add(self, todo: Todo):
@@ -74,13 +75,11 @@ class TodoRepository:
             await conn.execute(stmt)
 
 
-@registry
 async def list_events(query: ListTodoEvents, es: EventStore) -> list[NormalizedEvent]:
     events = await es.list_events(query.todo_id)
     return [e.__normalized__() for e in events]
 
 
-@registry
 class TodoService:
     def __init__(
         self,
@@ -119,3 +118,6 @@ class TodoService:
         async for stream in self._es.all_event_streams():
             todos.append(Todo.rebuild(stream))
         return todos
+
+
+registry.register(list_events, TodoService)

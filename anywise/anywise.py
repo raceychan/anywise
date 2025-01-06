@@ -9,10 +9,10 @@ from ididi import AsyncScope, DependencyGraph
 
 from ._itypes import (
     CommandHandler,
-    EventContext,
     EventListeners,
     FuncMeta,
     IContext,
+    IEventContext,
     IGuard,
     MethodMeta,
     PublishStrategy,
@@ -26,12 +26,9 @@ from ._registry import (
     ListenerMapping,
     MessageRegistry,
 )
-from ._visitor import gather_types
 from .errors import UnregisteredMessageError
 from .messages import IEvent
 from .sink import IEventSink
-
-# from warnings import warn
 
 
 async def default_send(
@@ -44,8 +41,8 @@ async def default_send(
 
 async def default_publish(
     message: Any,
-    context: EventContext | None,
-    listeners: list[Callable[[Any, EventContext], Awaitable[None]]],
+    context: IEventContext | None,
+    listeners: list[Callable[[Any, IEventContext], Awaitable[None]]],
 ) -> None:
     if context is None:
         context = MappingProxyType({})
@@ -75,8 +72,7 @@ class InjectMixin:
             instance = await scope.resolve(meta.owner_type)
             handler = MethodType(handler, instance)
         else:
-            ignore = ("context",) + meta.ignore
-            handler = self._dg.entry(ignore=ignore)(handler)
+            handler = self._dg.entry(ignore=meta.ignore)(handler)
 
         if not meta.is_contexted:
             handler = context_wrapper(handler)
@@ -95,15 +91,11 @@ class HandlerManager(InjectMixin):
         self._handler_metas.update(handler_mapping)
 
     def include_guards(self, guard_mapping: GuardMapping):
-        # gather commands
         for origin_target, guard_meta in guard_mapping.items():
             if origin_target is Any or origin_target is object:
                 self._global_guard.extend(guard_meta)
             else:
-                # TODO: move it to guard registry
-                drived_targets = gather_types(origin_target)
-                for target in drived_targets:
-                    self._guard_mapping[target].extend(guard_meta)
+                self._guard_mapping[origin_target].extend(guard_meta)
 
     async def _chain_guards(
         self,
@@ -113,7 +105,6 @@ class HandlerManager(InjectMixin):
         scope: AsyncScope,
     ) -> CommandHandler:
         command_guards = self._global_guard + self._guard_mapping[msg_type]
-
         if not command_guards:
             return handler
 
@@ -126,11 +117,15 @@ class HandlerManager(InjectMixin):
             for meta in command_guards
         ]
 
-        for i in range(len(guards) - 1):
-            guards[i].chain_next(guards[i + 1])
+        head, *rest = guards
+        ptr = head
 
-        guards[-1].chain_next(handler)
-        return guards[0]
+        for nxt in rest:
+            ptr.chain_next(nxt)
+            ptr = nxt
+
+        ptr.chain_next(handler)
+        return head
 
     def get_handler(self, msg_type: type) -> CommandHandler | None:
         try:
@@ -308,7 +303,7 @@ class Anywise(InjectMixin):
             return await self._sender(msg, context, handler)
 
     async def publish(
-        self, msg: object, *, context: EventContext | None = None
+        self, msg: object, *, context: IEventContext | None = None
     ) -> None:
         scope_proxy = self._dg.use_scope("message", create_on_miss=True, as_async=True)
 

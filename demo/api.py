@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI) -> ty.AsyncGenerator[AppState, None]:
     anywise = Anywise()
     anywise.include(registry)
     async with anywise.scope("app") as app_scope:
-        app_scope.register_dependent(anywise, Anywise)
+        app_scope.register_singleton(anywise, Anywise)
         engine = await app_scope.resolve(AsyncEngine)
         await create_tables(engine)
         yield {"anywise": anywise}
