@@ -3,6 +3,8 @@ import sys
 from types import UnionType
 from typing import Annotated, Any, Callable, Union, get_args, get_origin
 
+from .errors import InvalidMessageTypeError
+
 type Target = type | Callable[..., Any]
 
 
@@ -39,25 +41,23 @@ def gather_types(annotation: Any) -> set[type]:
     types: set[type] = set()
 
     # Handle None case
-    if annotation is None or annotation is inspect.Signature.empty:
+    if annotation is inspect.Signature.empty:
         return types
 
-    # Handle Union types (including X | Y syntax)
     origin = get_origin(annotation)
-    if origin is not None:
+    if not origin:
+        types.add(annotation)
+        types |= all_subclasses(annotation)
+    else:
+        # Union types (including X | Y syntax)
         if origin is Annotated:
             # For Annotated[Type, ...], we only care about the first argument
-            types.update(gather_types(get_args(annotation)[0]))
-        elif origin in UNION_META:
-            # Handle both Union[X, Y] and X | Y syntax
+            param_type = get_args(annotation)[0]
+            types.update(gather_types(param_type))
+        elif origin in UNION_META:  # Union[X, Y] and X | Y
             for arg in get_args(annotation):
                 types.update(gather_types(arg))
         else:
             # Generic type, e.g. List, Dict, etc.
-            types.add(origin)
-            for arg in get_args(annotation):
-                types.update(gather_types(arg))
-    else:
-        types.add(annotation)
-        types |= all_subclasses(annotation)
+            raise InvalidMessageTypeError(origin)
     return types

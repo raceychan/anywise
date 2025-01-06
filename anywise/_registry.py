@@ -19,7 +19,7 @@ from ._itypes import (
 from ._visitor import Target, gather_types
 from .errors import (
     HandlerRegisterFailError,
-    InvalidMessageAnnotationError,
+    InvalidHandlerError,
     MessageHandlerNotFoundError,
     NotSupportedHandlerTypeError,
 )
@@ -40,7 +40,7 @@ def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any
 
     for msg_type in derived_msgtypes:
         if not issubclass(msg_type, msg_base):
-            raise InvalidMessageAnnotationError(msg_base, msg_type, func)
+            raise InvalidHandlerError(msg_base, msg_type, func)
 
     metas = [
         FuncMeta[Any](

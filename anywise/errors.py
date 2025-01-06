@@ -14,12 +14,17 @@ class NotSupportedHandlerTypeError(AnyWiseError):
 class HandlerRegisterFailError(AnyWiseError): ...
 
 
+class InvalidMessageTypeError(HandlerRegisterFailError):
+    def __init__(self, msg_type: type):
+        super().__init__(f"{msg_type} is not a valid message type")
+
+
 class MessageHandlerNotFoundError(HandlerRegisterFailError):
     def __init__(self, base_type: Any, handler: Any):
         super().__init__(f"can't find param of type `{base_type}` in {handler}")
 
 
-class InvalidMessageAnnotationError(HandlerRegisterFailError):
+class InvalidHandlerError(HandlerRegisterFailError):
     def __init__(self, basetype: type, msg_type: type, handler: Callable[..., Any]):
         msg = f"{handler} is receiving {msg_type}, which is not a valid subclass of {basetype}"
         super().__init__(msg)
