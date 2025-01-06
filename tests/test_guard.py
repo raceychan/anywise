@@ -34,10 +34,6 @@ class LogginGuard(BaseGuard):
                 return response
 
 
-user_registry.add_guards(LogginGuard)
-
-
-@user_registry.pre_handle
 async def mark(command: UserCommand, context: IContext) -> None:
     if not context.get("processed_by"):
         context["processed_by"] = ["1"]
@@ -49,7 +45,6 @@ class TimeContext(ty.TypedDict):
     processed_by: list[str]
 
 
-@user_registry.pre_handle
 async def timer(command: CreateUser, context: IContext) -> None:
     if not context.get("processed_by"):
         context["processed_by"] = ["2"]
@@ -57,22 +52,28 @@ async def timer(command: CreateUser, context: IContext) -> None:
         context["processed_by"].append("2")
 
 
-@user_registry
 async def handler_create(_: CreateUser, context: TimeContext, anywise: Anywise):
     assert context["processed_by"] == ["1", "2"]
     return "created"
 
 
-@user_registry
 async def handler_update(update_user: UpdateUser, context: TimeContext):
     assert context["processed_by"]
     return "updated"
 
 
-@user_registry.post_handle
 async def post[R](create_user: CreateUser, context: IContext, response: R) -> R:
     assert response in ("created", "updated")
     return response
+
+
+user_registry.register(
+    LogginGuard,
+    handler_create,
+    handler_update,
+    pre_hanldes=[mark, timer],
+    post_handles=[post],
+)
 
 
 async def test_guard():

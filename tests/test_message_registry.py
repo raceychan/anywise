@@ -39,7 +39,7 @@ class UserService:
 
 
 def test_message_registry():
-    user_message_registry.register_all(react_to_event, UserService)
+    user_message_registry.register(react_to_event, UserService)
     assert user_message_registry.event_mapping[UserNameUpdated]
     assert user_message_registry.command_mapping[CreateUser]
 

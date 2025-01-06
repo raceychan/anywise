@@ -23,7 +23,7 @@ from .errors import (
     MessageHandlerNotFoundError,
     NotSupportedHandlerTypeError,
 )
-from .guard import Guard, GuardFunc, PostHandle
+from .guard import BaseGuard, Guard, GuardFunc, PostHandle
 
 type GuardMapping = defaultdict[type, list[GuardMeta]]
 
@@ -146,7 +146,7 @@ class MessageRegistry[C, E]:
     def __call__[
         **P, R
     ](self, handler: type[R] | Callable[P, R]) -> type[R] | Callable[P, R]:
-        return self.register(handler)
+        return self._register(handler)
 
     @property
     def graph(self) -> DependencyGraph:
@@ -206,26 +206,30 @@ class MessageRegistry[C, E]:
                 self.event_mapping[msg_type].append(meta)
 
     @overload
-    def register[T](self, handler: type[T]) -> type[T]: ...
+    def _register[T](self, handler: type[T]) -> type[T]: ...
 
     @overload
-    def register[**P, R](self, handler: Callable[P, R]) -> Callable[P, R]: ...
+    def _register[**P, R](self, handler: Callable[P, R]) -> Callable[P, R]: ...
 
-    def register(self, handler: Target):
+    def _register(self, handler: Target):
         try:
             self._register_commandhanlders(handler)
         except HandlerRegisterFailError:
             self._register_eventlisteners(handler)
         return handler
 
-    def register_all(
+    def register(
         self,
-        *handlers: Callable[..., Any],
+        *handlers: Callable[..., Any] | type[BaseGuard],
         pre_hanldes: list[GuardFunc] | None = None,
         post_handles: list[PostHandle[Any]] | None = None,
     ) -> None:
         for handler in handlers:
-            self.register(handler)
+            if inspect.isclass(handler):
+                if issubclass(handler, BaseGuard):
+                    self.add_guards(handler)
+                    continue
+            self._register(handler)
 
         if pre_hanldes:
             for pre_handle in pre_hanldes:

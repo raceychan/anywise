@@ -40,4 +40,21 @@ now will build guards before send, now the order of anywise.include(guard_regist
 
 register union types
 
+
+## version 0.1.8
+
+- new, `MessageRegistry.register` method
+provides a flexible and versatile way to register handlers in an imperative manner.
+
+```py
+user_registry.register(
+    LogginGuard,
+    handler_create,
+    handler_update,
+    pre_hanldes=[validate_command, add_start_time],
+    post_handles=[validate_result],
+)
+```
+
+
 ### version 1.0.0
