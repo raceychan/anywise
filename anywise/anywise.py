@@ -206,6 +206,9 @@ class Inspect:
         if listeners := aw.listener_manager.get_listeners(key):
             return listeners
 
+    def guards(self, key: type):
+        ...
+
 
 class Anywise(InjectMixin):
     """

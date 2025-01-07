@@ -5,7 +5,7 @@ from ididi import INodeConfig as INodeConfig
 from ididi import use as use
 
 from ._itypes import Context as Context
-from ._itypes import EventContext as EventContext
+from ._itypes import FrozenContext as FrozenContext
 from ._itypes import GuardFunc as GuardFunc
 from ._itypes import IContext as IContext
 from ._itypes import IGuard as IGuard

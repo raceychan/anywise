@@ -9,7 +9,7 @@ from ._itypes import (
     CTX_MARKER,
     MISSING,
     Context,
-    EventContext,
+    FrozenContext,
     FuncMeta,
     GuardMeta,
     HandlerMapping,
@@ -31,7 +31,7 @@ from .guard import BaseGuard, Guard, GuardFunc, PostHandle
 type GuardMapping = defaultdict[type, list[GuardMeta]]
 
 
-IGNORE_TYPES = (Context, EventContext)
+IGNORE_TYPES = (Context, FrozenContext)
 
 
 def is_contextparam(param: list[inspect.Parameter]) -> bool:
@@ -70,7 +70,7 @@ def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any
             handler=func,
             is_async=is_async,
             is_contexted=is_contexted,
-            ignore=ignore,
+            ignore=ignore,  # type: ignore
         )
         for t in derived_msgtypes
     ]
@@ -103,7 +103,7 @@ def get_methodmetas(msg_base: type, cls: type) -> list[MethodMeta[Any]]:
                 handler=func,
                 is_async=is_async,
                 is_contexted=is_contexted,
-                ignore=ignore,
+                ignore=ignore,  # type: ignore
                 owner_type=cls,
             )
             for t in derived_msgtypes
@@ -148,7 +148,6 @@ class MessageRegistry[C, E]:
 
         self.command_mapping: HandlerMapping[Any] = {}
         self.event_mapping: ListenerMapping[Any] = {}
-
         self.guard_mapping: GuardMapping = defaultdict(list)
 
     def __repr__(self) -> str:

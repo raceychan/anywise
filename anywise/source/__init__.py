@@ -81,82 +81,82 @@
 #         loop.run_until_complete(*_cleanup_coroutines)
 #         loop.close()
 
-import typing as ty
+# import typing as ty
 
 
-class ICommandEnvelope(ty.Protocol):
-    """
-    Meta data of event
-    encryption type, schema, key, and serialization format. etc.
+# class ICommandEnvelope(ty.Protocol):
+#     """
+#     Meta data of event
+#     encryption type, schema, key, and serialization format. etc.
 
-    express the whole process chain of command
+#     express the whole process chain of command
 
-    command -> handler -> response | errors
-    """
+#     command -> handler -> response | errors
+#     """
 
-    headers: "CommandMeta"
-    command: "ICommand"
-
-
-class CommandMeta:
-    # source: uri, post: users/sessions/chats
-    command_source: ...  # commands/command/v1,
-    answer: type
-    errors: list[Exception]
+#     headers: "CommandMeta"
+#     command: "ICommand"
 
 
-class ICommand:
-    entity_id: str
-    command_id: str
+# class CommandMeta:
+#     # source: uri, post: users/sessions/chats
+#     command_source: ...  # commands/command/v1,
+#     answer: type
+#     errors: list[Exception]
 
 
-class HttpSource: 
-    "Uvicorn"
-    ...
+# class ICommand:
+#     entity_id: str
+#     command_id: str
 
 
-class KafkaSource: ...
+# class HttpSource: 
+#     "Uvicorn"
+#     ...
 
 
-class GRPCSource: ...
-"""
-class KafkaSource:
-    def __init__(self, client, anywise: Anywise)
-        self.client = client
-        self.anywise = anywise
+# class KafkaSource: ...
 
-    
-    async def start(self): ...
-    async def stop(self): ...
+
+# class GRPCSource: ...
+# """
+# class KafkaSource:
+#     def __init__(self, client, anywise: Anywise)
+#         self.client = client
+#         self.anywise = anywise
 
     
-    async def polling(self):
-        ...
+#     async def start(self): ...
+#     async def stop(self): ...
+
+    
+#     async def polling(self):
+#         ...
 
         
-async def main():
-    async with KafkaSource() as source:
-        await source.polling()
-"""
+# async def main():
+#     async with KafkaSource() as source:
+#         await source.polling()
+# """
 
 
-class RedisJobQueue:
-    "https://arq-docs.helpmanual.io/"
+# class RedisJobQueue:
+#     "https://arq-docs.helpmanual.io/"
 
-    """
-    async def main():
+#     """
+#     async def main():
 
-    redis = await create_pool(REDIS_SETTINGS)
+#     redis = await create_pool(REDIS_SETTINGS)
 
-    source = RedisJobSource(redis, anywise)
+#     source = RedisJobSource(redis, anywise)
         
-    # server code
-    for url in ('https://facebook.com', 'https://microsoft.com', 'https://github.com'):
-        command = DownloadContent(url)
-        await source.send(command)
+#     # server code
+#     for url in ('https://facebook.com', 'https://microsoft.com', 'https://github.com'):
+#         command = DownloadContent(url)
+#         await source.send(command)
     
-    # client code
-    async with source:
-        await source.run_forever()
-    """
-    ...
+#     # client code
+#     async with source:
+#         await source.run_forever()
+#     """
+#     ...

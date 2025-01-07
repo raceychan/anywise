@@ -20,6 +20,15 @@ include = ["anywise/*.py"]
 python_version = "3.12"
 typeCheckingMode = "strict"
 
+[tool.coverage.run]
+omit = [
+  # omit anything in a .local directory anywhere
+  "anywise/utils/*",
+  "anywise/messages/*",
+  "anywise/integration/*"
+]
+
+
 [tool.pytest.ini_options]
 addopts = "-vx --strict-markers --capture=no"
 asyncio_mode = "auto"

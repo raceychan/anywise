@@ -39,7 +39,7 @@ type LifeSpan = Callable[..., AsyncGenerator[Any, None]]
 CTX_MARKER = "__anywise_context__"
 
 type Context[M: MutableMapping[Any, Any]] = Annotated[M, CTX_MARKER]
-type EventContext[M: Mapping[Any, Any]] = Annotated[M, CTX_MARKER]
+type FrozenContext[M: Mapping[Any, Any]] = Annotated[M, CTX_MARKER]
 
 
 class IPackage(Protocol):
@@ -81,10 +81,12 @@ class FuncMeta[Message]:
 class MethodMeta[Message](FuncMeta[Message]):
     owner_type: type
 
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class GuardMeta:
     guard_target: type
     guard: IGuard | type[IGuard]
+
 
 type Result[R, E] = Annotated[R, E]
 """

@@ -1,7 +1,7 @@
 from typing import TypedDict
 
 from anywise import Anywise, MessageRegistry
-from anywise._itypes import EventContext
+from anywise._itypes import FrozenContext
 
 from .conftest import CreateUser, UserCommand
 
@@ -12,7 +12,7 @@ class Time(TypedDict):
     name: str
 
 
-async def signup(cmd: CreateUser, ctx: EventContext[Time]):
+async def signup(cmd: CreateUser, ctx: FrozenContext[Time]):
     assert isinstance(ctx, dict)
 
 
