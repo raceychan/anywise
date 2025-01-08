@@ -1,8 +1,8 @@
 from asyncio import to_thread
 from collections import defaultdict
 from functools import partial
-from types import MappingProxyType, MethodType
-from typing import Any, Awaitable, Callable, cast
+from types import MethodType
+from typing import Any, Callable, cast
 from weakref import ref
 
 from ididi import AsyncScope, DependencyGraph
@@ -19,36 +19,17 @@ from ._itypes import (
     Registee,
     SendStrategy,
 )
-from ._registry import (
+from .errors import UnregisteredMessageError
+from .messages import IEvent
+from .registry import (
     GuardMapping,
     GuardMeta,
     HandlerMapping,
     ListenerMapping,
     MessageRegistry,
 )
-from .errors import UnregisteredMessageError
-from .messages import IEvent
 from .sink import IEventSink
-
-
-async def default_send(
-    message: Any, context: IContext | None, handler: Callable[[Any, IContext], Any]
-) -> Any:
-    if context is None:
-        context = dict()
-    return await handler(message, context)
-
-
-async def default_publish(
-    message: Any,
-    context: IEventContext | None,
-    listeners: list[Callable[[Any, IEventContext], Awaitable[None]]],
-) -> None:
-    if context is None:
-        context = MappingProxyType({})
-
-    for listener in listeners:
-        await listener(message, context)
+from .strategies import default_publish, default_send
 
 
 def context_wrapper(origin: Callable[[Any], Any]):
@@ -58,7 +39,7 @@ def context_wrapper(origin: Callable[[Any], Any]):
     return inner
 
 
-class InjectMixin:
+class ManagerBase:
     def __init__(self, dg: DependencyGraph):
         self._dg = dg
 
@@ -79,7 +60,7 @@ class InjectMixin:
         return handler
 
 
-class HandlerManager(InjectMixin):
+class HandlerManager(ManagerBase):
     def __init__(self, dg: DependencyGraph):
         super().__init__(dg)
         self._handler_metas: dict[type, FuncMeta[Any]] = {}
@@ -148,7 +129,7 @@ class HandlerManager(InjectMixin):
         return guarded_handler
 
 
-class ListenerManager(InjectMixin):
+class ListenerManager(ManagerBase):
     def __init__(self, dg: DependencyGraph):
         super().__init__(dg)
         self._listener_metas: dict[type, list[FuncMeta[Any]]] = dict()
@@ -172,6 +153,10 @@ class ListenerManager(InjectMixin):
         else:
             return [meta.handler for meta in listener_metas]
 
+    #def replace_listener(self, msg_type: type, old, new):
+    #    idx = self._listener_metas[msg_type].index(old)
+    #    self._listener_metas[msg_type][idx] = FuncMeta.from_handler(msg_type, new)
+
     async def resolve_listeners(
         self, msg_type: type, *, scope: AsyncScope
     ) -> EventListeners:
@@ -191,26 +176,26 @@ class Inspect:
     a util class for inspecting anywise
     """
 
-    def __init__(self, aw: "Anywise"):
-        self._aw = ref(aw)
+    def __init__(
+        self, handler_manager: HandlerManager, listener_manager: ListenerManager
+    ):
+        self._hm = ref(handler_manager)
+        self._lm = ref(listener_manager)
 
     def __getitem__(self, key: type) -> CommandHandler | EventListeners | None:
-        aw = self._aw()
+        hm, lm = self._hm(), self._lm()
 
-        if aw is None:
-            raise Exception(f"{self.__class__.__name__} should not outlive anywise")
-
-        if handler := aw.handler_manager.get_handler(key):
+        if hm and (handler := hm.get_handler(key)):
             return handler
 
-        if listeners := aw.listener_manager.get_listeners(key):
+        if lm and (listeners := lm.get_listeners(key)):
             return listeners
 
-    def guards(self, key: type):
-        ...
+    # def guards(self, key: type):
+    #     ...
 
 
-class Anywise(InjectMixin):
+class Anywise:
     """
 
     - dependency_graph: `DependencyGraph`
@@ -229,7 +214,6 @@ class Anywise(InjectMixin):
             for listener in listeners:
                 await listener(msg, context)
         ```
-
     """
 
     _sender: SendStrategy
@@ -243,17 +227,25 @@ class Anywise(InjectMixin):
         sender: SendStrategy = default_send,
         publisher: PublishStrategy = default_publish,
     ):
-        dependency_graph = dependency_graph or DependencyGraph()
-        super().__init__(dependency_graph)
-        self.handler_manager = HandlerManager(self._dg)
-        self.listener_manager = ListenerManager(self._dg)
+        self._dg = dependency_graph or DependencyGraph()
+        # super().__init__(dependency_graph)
+        self._handler_manager = HandlerManager(self._dg)
+        self._listener_manager = ListenerManager(self._dg)
 
         self._sender = sender
         self._publisher = publisher
         self._sink = sink
-        self._dg.register_singleton(self)
 
         self.include(*registries)
+        self._dg.register_singleton(self)
+
+    @property
+    def sender(self) -> SendStrategy:
+        return self._sender
+
+    @property
+    def publisher(self) -> PublishStrategy:
+        return self._publisher
 
     # async def __enter__(self):
     #     """create an global scope and create resource"""
@@ -281,7 +273,10 @@ class Anywise(InjectMixin):
 
     @property
     def inspect(self) -> Inspect:
-        return Inspect(self)
+        return Inspect(
+            handler_manager=self._handler_manager,
+            listener_manager=self._listener_manager,
+        )
 
     def register_singleton(self, singleton: Any):
         self._dg.register_singleton(singleton)
@@ -289,9 +284,9 @@ class Anywise(InjectMixin):
     def include(self, *registries: MessageRegistry[Any, Any]) -> None:
         for msg_registry in registries:
             self._dg.merge(msg_registry.graph)
-            self.handler_manager.include_handlers(msg_registry.command_mapping)
-            self.handler_manager.include_guards(msg_registry.guard_mapping)
-            self.listener_manager.include_listeners(msg_registry.event_mapping)
+            self._handler_manager.include_handlers(msg_registry.command_mapping)
+            self._handler_manager.include_guards(msg_registry.guard_mapping)
+            self._listener_manager.include_listeners(msg_registry.event_mapping)
         self._dg.static_resolve_all()
 
     def scope(self, name: str | None = None):
@@ -302,7 +297,7 @@ class Anywise(InjectMixin):
         scope_proxy = self._dg.use_scope("message", create_on_miss=True, as_async=True)
 
         async with scope_proxy as scope:
-            handler = await self.handler_manager.resolve_handler(type(msg), scope)
+            handler = await self._handler_manager.resolve_handler(type(msg), scope)
             return await self._sender(msg, context, handler)
 
     async def publish(
@@ -311,7 +306,7 @@ class Anywise(InjectMixin):
         scope_proxy = self._dg.use_scope("message", create_on_miss=True, as_async=True)
 
         async with scope_proxy as scope:
-            resolved_listeners = await self.listener_manager.resolve_listeners(
+            resolved_listeners = await self._listener_manager.resolve_listeners(
                 type(msg), scope=scope
             )
             return await self._publisher(msg, context, resolved_listeners)
@@ -320,18 +315,3 @@ class Anywise(InjectMixin):
         if self._sink is None:
             raise Exception("sink is not set")
         await self._sink.sink(event)
-
-
-"""
-
-def source_factory():
-    anywise = Anywise()
-    source = KafkaSource(
-        anywise=anywise
-    )
-
-
-```bash
-anywise main.source_factory
-```
-"""

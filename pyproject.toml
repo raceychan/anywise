@@ -1,6 +1,6 @@
 [project]
 authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
-dependencies = ["ididi>=1.2.1"]
+dependencies = ["ididi>=1.2.2"]
 description = "Anywise let you write your application anywise"
 dynamic = ["version"]
 name = "anywise"
@@ -25,7 +25,7 @@ omit = [
   # omit anything in a .local directory anywhere
   "anywise/utils/*",
   "anywise/messages/*",
-  "anywise/integration/*"
+  "anywise/integration/*",
 ]
 
 
@@ -35,18 +35,18 @@ asyncio_mode = "auto"
 
 [dependency-groups]
 dev = [
-    "fastapi>=0.115.6",
-    "pytest-asyncio>=0.25.0",
-    "pytest-cov >=4.1.0",
-    "pytest>=8.3.4",
-    "sqlalchemy>=2.0.36",
-    "uvicorn>=0.34.0",
-    "aiosqlite>=0.20.0",
-    "hatch>=1.14.0",
-    "pyright>=1.1.391",
-    "loguru>=0.7.3",
-    "msgspec>=0.18.6",
-    "mkdocs-material[imaging]>=9.5.49",
-    "pillow>=10.4.0",
-    "cairosvg>=2.7.1",
+  "fastapi>=0.115.6",
+  "pytest-asyncio>=0.25.0",
+  "pytest-cov >=4.1.0",
+  "pytest>=8.3.4",
+  "sqlalchemy>=2.0.36",
+  "uvicorn>=0.34.0",
+  "aiosqlite>=0.20.0",
+  "hatch>=1.14.0",
+  "pyright>=1.1.391",
+  "loguru>=0.7.3",
+  "msgspec>=0.18.6",
+  "mkdocs-material[imaging]>=9.5.49",
+  "pillow>=10.4.0",
+  "cairosvg>=2.7.1",
 ]

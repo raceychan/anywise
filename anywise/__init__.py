@@ -9,7 +9,7 @@ from ._itypes import FrozenContext as FrozenContext
 from ._itypes import GuardFunc as GuardFunc
 from ._itypes import IContext as IContext
 from ._itypes import IGuard as IGuard
-from ._registry import MessageRegistry as MessageRegistry
+from .registry import MessageRegistry as MessageRegistry
 from .anywise import Anywise as Anywise
 from .anywise import CommandHandler as CommandHandler
 from .anywise import EventListeners as EventListeners

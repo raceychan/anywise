@@ -1,7 +1,28 @@
 from asyncio import TaskGroup
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Awaitable, Callable
 
-from .anywise import EventListeners, IEventContext
+from ._itypes import EventListeners, IContext, IEventContext
+
+
+async def default_send(
+    message: Any, context: IContext | None, handler: Callable[[Any, IContext], Any]
+) -> Any:
+    if context is None:
+        context = dict()
+    return await handler(message, context)
+
+
+async def default_publish(
+    message: Any,
+    context: IEventContext | None,
+    listeners: list[Callable[[Any, IEventContext], Awaitable[None]]],
+) -> None:
+    if context is None:
+        context = MappingProxyType({})
+
+    for listener in listeners:
+        await listener(message, context)
 
 
 async def concurrent_publish(

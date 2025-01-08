@@ -49,6 +49,7 @@ def is_contextparam(param: list[inspect.Parameter]) -> bool:
 
 
 def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any]]:
+    # TODO?: make this a class function of FuncMeta
     params = inspect.Signature.from_callable(func).parameters.values()
     if not params:
         raise MessageHandlerNotFoundError(msg_base, func)
@@ -261,7 +262,6 @@ class MessageRegistry[C, E]:
             for post_handle in post_handles:
                 self.post_handle(post_handle)
 
-    # TODO? separate guard registry from message registry
     def get_guardtarget(self, func: Callable[..., Any]) -> set[type]:
         if inspect.isclass(func):
             func_params = list(inspect.signature(func.__call__).parameters.values())

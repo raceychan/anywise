@@ -38,7 +38,7 @@ wheels = [
 
 [[package]]
 name = "anywise"
-version = "0.1.7"
+version = "0.1.8"
 source = { editable = "." }
 dependencies = [
     { name = "ididi" },
@@ -63,7 +63,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "ididi", specifier = ">=1.2.1" }]
+requires-dist = [{ name = "ididi", specifier = ">=1.2.2" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -473,11 +473,11 @@ wheels = [
 
 [[package]]
 name = "ididi"
-version = "1.2.1"
+version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/be/e1/fbeff80447d846fc7f4ac024b6f991bb5f50fd4f0b0bdcbbadb237955bee/ididi-1.2.1.tar.gz", hash = "sha256:00ac2f1767bacce18599f059fe5c8f447648da67471125e0f39febb9fc3c5c24", size = 98529 }
+sdist = { url = "https://files.pythonhosted.org/packages/38/6e/628f427c5f022aef1fe565a8d420a1815c551126494cbadfa24b8861c5e0/ididi-1.2.2.tar.gz", hash = "sha256:8a9a098132fb45b04bf257a6ff39cd55eeace8902bb3ca862b53739745d1bea8", size = 98897 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/46/342f07e2db71739079823adbc2818c710a7e5b3dc34b91ab6f3c19ff733e/ididi-1.2.1-py3-none-any.whl", hash = "sha256:498295ceacf5932a4398afcdfb2c21f71ca525a8ae2c55db536c681873e10853", size = 28463 },
+    { url = "https://files.pythonhosted.org/packages/a5/44/a04845a2416ca3038e36bcd159136736c875831aba90d4d08b0d76ffac81/ididi-1.2.2-py3-none-any.whl", hash = "sha256:0c78ab100ef9b887facc07773d3ab1d161464caac6cf6d80b3ed5071f3ae62a3", size = 28371 },
 ]
 
 [[package]]

@@ -1,8 +1,8 @@
 import pytest
 
 from anywise import Anywise, MessageRegistry
-from anywise._registry import get_funcmetas, get_methodmetas
 from anywise.errors import InvalidHandlerError
+from anywise.registry import get_funcmetas, get_methodmetas
 from tests.conftest import (
     CreateUser,
     RemoveUser,
