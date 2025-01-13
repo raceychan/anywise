@@ -1,24 +1,11 @@
 import inspect
 from collections import defaultdict
 from functools import partial
-from typing import Any, Callable, Unpack, cast, overload
+from typing import Any, Callable, Final, Literal, TypeGuard, Unpack, cast, overload
 
 from ididi import DependencyGraph, INode, INodeConfig
 
-from ._itypes import (
-    CTX_MARKER,
-    MISSING,
-    Context,
-    FrozenContext,
-    FuncMeta,
-    GuardMeta,
-    HandlerMapping,
-    IGuard,
-    ListenerMapping,
-    Maybe,
-    MethodMeta,
-    Missed,
-)
+from ._ds import FuncMeta, GuardMeta, HandlerMapping, ListenerMapping, MethodMeta
 from ._visitor import Target, gather_types
 from .errors import (
     HandlerRegisterFailError,
@@ -27,8 +14,29 @@ from .errors import (
     NotSupportedHandlerTypeError,
 )
 from .guard import BaseGuard, Guard, GuardFunc, PostHandle
+from .Interface import CTX_MARKER, Context, FrozenContext, IGuard
 
 type GuardMapping = defaultdict[type, list[GuardMeta]]
+
+
+class _Missed:
+
+    def __str__(self) -> str:
+        return "MISSING"
+
+    def __bool__(self) -> Literal[False]:
+        return False
+
+
+Missed: Final[type[_Missed]] = _Missed
+MISSING = _Missed()
+
+
+type Maybe[T] = T | _Missed
+
+
+def is_provided[T](obj: Maybe[T]) -> TypeGuard[T]:
+    return obj is not MISSING
 
 
 IGNORE_TYPES = (Context, FrozenContext)

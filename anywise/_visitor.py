@@ -42,6 +42,7 @@ def gather_types(annotation: Any) -> set[type]:
 
     # Handle None case
     if annotation is inspect.Signature.empty:
+        # raise Exception?
         return types
 
     origin = get_origin(annotation)

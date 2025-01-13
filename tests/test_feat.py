@@ -1,24 +1,22 @@
-from typing import TypedDict
-
-from anywise import Anywise, MessageRegistry
-from anywise._itypes import FrozenContext
-
-from .conftest import CreateUser, UserCommand
-
-reg = MessageRegistry(command_base=UserCommand)
 
 
-class Time(TypedDict):
-    name: str
+class People:
+
+    def __init__(self, name: str):
+        self.__name = name
+
+    def get_name(self):
+        return self.__name
 
 
-async def signup(cmd: CreateUser, ctx: FrozenContext[Time]):
-    assert isinstance(ctx, dict)
+class Student(People):
+
+    def hello(self):
+        print(f"hello, i am {self.get_name()}")
 
 
-async def test_ctx():
-    reg.register(signup)
+def test():
+    s = Student("a")
+    print(s.get_name())
 
-    aw = Anywise(reg)
-
-    await aw.send(CreateUser("1", "2"))
+    s.hello()

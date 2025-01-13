@@ -1,6 +1,6 @@
 from typing import Any, Callable
 
-from ._itypes import IGuard
+from .Interface import IGuard
 
 
 class AnyWiseError(Exception): ...
@@ -38,3 +38,8 @@ class UnregisteredMessageError(AnyWiseError):
 class DunglingGuardError(AnyWiseError):
     def __init__(self, guard: IGuard):
         super().__init__(f"Dangling guard {guard}, most likely a bug")
+
+
+class SinkUnsetError(AnyWiseError):
+    def __init__(self):
+        super().__init__("Sink is not set")

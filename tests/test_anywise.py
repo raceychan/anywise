@@ -1,8 +1,9 @@
-from typing import Mapping, MutableMapping
+from dataclasses import dataclass
+from typing import Mapping
 
 import pytest
 
-from anywise import FrozenContext
+from anywise import Context, FrozenContext, Ignore
 from anywise.anywise import (
     Anywise,
     ListenerManager,
@@ -11,13 +12,25 @@ from anywise.anywise import (
     default_publish,
     default_send,
 )
-from anywise.errors import UnregisteredMessageError
+from anywise.errors import SinkUnsetError, UnregisteredMessageError
+
+
+async def handler(msg: str, ctx: Context[dict[str, str]]) -> str:
+    assert ctx == {}
+    return "handled"
+
+
+async def test_send_with_scope():
+    mr = MessageRegistry(command_base=str)
+    mr.register(handler)
+
+    aw = Anywise(mr)
+
+    async with aw.scope("message") as scope:
+        await aw.send("a", scope=scope)
 
 
 async def test_default_send_without_context():
-    async def handler(msg: str, ctx: MutableMapping[str, str]) -> str:
-        assert ctx == {}
-        return "handled"
 
     result = await default_send("test_message", None, handler)
     assert result == "handled"
@@ -42,28 +55,6 @@ async def test_inject_mixin_resolve_sync_meta():
     await aw.send("test")
 
 
-async def test_inspect_getitem():
-    from anywise import Anywise, MessageRegistry
-    from tests.conftest import CreateUser, UserCommand
-
-    registry = MessageRegistry(command_base=UserCommand)
-
-    async def handle_create(cmd: CreateUser) -> str:
-        return "created"
-
-    registry.register(handle_create)
-    aw = Anywise(registry)
-
-    # Test getting handler
-    handler = aw.inspect[CreateUser]
-    assert handler is not None
-
-    # Test getting non-existent handler
-    class UnregisteredCommand: ...
-
-    assert aw.inspect[UnregisteredCommand] is None
-
-
 # Test for line 96 (context_wrapper)
 async def test_context_wrapper_with_non_context_handler():
     async def original_handler(msg: str) -> str:
@@ -76,8 +67,6 @@ async def test_context_wrapper_with_non_context_handler():
 
 # Test for lines 141-142, 165 (ListenerManager)
 async def test_listener_manager_include_listeners():
-    from ididi import DependencyGraph
-
     class TestEvent:
         pass
 
@@ -87,25 +76,19 @@ async def test_listener_manager_include_listeners():
     async def listener2(event: TestEvent, ctx: dict[str, str]) -> None:
         return None
 
-    dg = DependencyGraph()
-    manager = ListenerManager(dg)
-
     reg = MessageRegistry(event_base=TestEvent)
 
     reg.register(listener1, listener2)
 
+    aw = Anywise(reg)
+
     # Create event mapping
     # Test including listeners for new message type
-    manager.include_listeners(reg.event_mapping)
-    assert len(manager.get_listeners(TestEvent)) == 2
-
-    # Test including listeners for existing message type
-    manager.include_listeners(reg.event_mapping)  # Should append to existing listeners
-    assert len(manager.get_listeners(TestEvent)) == 4
+    listeners = aw.inspect.listeners(TestEvent)
+    assert listeners and len(listeners) == 2
 
 
-# Test for lines 173, 180-181 (get_listeners and resolve_listeners)
-async def test_listener_manager_get_and_resolve_listeners():
+async def test_unregistered_event():
     from ididi import DependencyGraph
 
     class TestEvent:
@@ -123,16 +106,6 @@ async def test_listener_manager_get_and_resolve_listeners():
             await manager.resolve_listeners(TestEvent, scope=scope)
 
 
-# Test for lines 201, 207, 210 (Inspect class)
-async def test_inspect_weakref_cleanup():
-    aw = Anywise()
-    inspector = aw.inspect
-
-    del aw
-
-    inspector[str]
-
-
 # Test for lines 293, 304 (Anywise send/publish without sink)
 async def test_anywise_sink_not_set():
     aw = Anywise()
@@ -140,7 +113,7 @@ async def test_anywise_sink_not_set():
     class TestEvent:
         pass
 
-    with pytest.raises(Exception, match="sink is not set"):
+    with pytest.raises(SinkUnsetError):
         await aw.sink(TestEvent())
 
 
@@ -166,3 +139,64 @@ async def test_anywise_publish_with_context():
 
     await aw.publish(TestEvent(), context=test_context)
     assert context_received == test_context
+
+
+async def test_aw_properties():
+    aw = Anywise()
+    assert aw.sender is default_send
+    assert aw.publisher is default_publish
+
+
+async def test_aw_handle_command():
+    class Command: ...
+
+    @dataclass
+    class CreateUser(Command):
+        user_name: str
+
+    class UserService:
+        def __init__(self, conn: Ignore[str]):
+            self.conn = conn
+
+    service = UserService("asdf")
+
+    async def handle_create(cmd: CreateUser, aw: Anywise, service: UserService):
+        assert service.conn == "asdf"
+        return "ok"
+
+    mr = MessageRegistry(command_base=Command)
+    mr.register(handle_create)
+
+    aw = Anywise(mr)
+    aw.graph.register_singleton(service)
+    assert await aw.send(CreateUser("user")) == "ok"
+
+
+async def test_aw_handle_event():
+    class Event: ...
+
+    @dataclass
+    class UserCreated(Event):
+        user_name: str
+
+    class UserService:
+        def __init__(self, conn: Ignore[str]):
+            self.conn = conn
+
+    service = UserService("asdf")
+
+    async def listen_created(event: UserCreated, aw: Anywise, service: UserService):
+        assert service.conn == "asdf"
+
+    async def listen_created_aswell(event: UserCreated, service: UserService):
+        assert service.conn == "asdf"
+
+    mr1 = MessageRegistry(event_base=Event)
+    mr2 = MessageRegistry(event_base=Event)
+
+    mr1.register(listen_created)
+    mr2.register(listen_created_aswell)
+
+    aw = Anywise(mr1, mr2)
+    aw.graph.register_singleton(service)
+    await aw.publish(UserCreated("user"))

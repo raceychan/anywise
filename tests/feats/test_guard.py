@@ -9,7 +9,7 @@ user_registry = MessageRegistry(command_base=UserCommand)
 from uuid import uuid4
 
 
-class LogginGuard(BaseGuard):
+class LoggingGuard(BaseGuard):
 
     def __init__(self):
         super().__init__()
@@ -64,7 +64,7 @@ async def post[R](create_user: CreateUser, context: IContext, response: R) -> R:
 
 
 user_registry.register(
-    LogginGuard,
+    LoggingGuard,
     handler_create,
     handler_update,
     pre_hanldes=[mark, timer],

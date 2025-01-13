@@ -56,5 +56,4 @@ user_registry.register(
 )
 ```
 
-
 ### version 1.0.0

@@ -2,32 +2,25 @@ from asyncio import to_thread
 from collections import defaultdict
 from functools import partial
 from types import MethodType
-from typing import Any, Callable, cast
+from typing import Any, Callable, Sequence, cast
 from weakref import ref
 
 from ididi import AsyncScope, DependencyGraph
 
-from ._itypes import (
+from ._ds import FuncMeta, GuardMeta, MethodMeta
+from .errors import SinkUnsetError, UnregisteredMessageError
+from .Interface import (
     CommandHandler,
     EventListeners,
-    FuncMeta,
     IContext,
     IEventContext,
     IGuard,
-    MethodMeta,
     PublishStrategy,
     Registee,
     SendStrategy,
 )
-from .errors import UnregisteredMessageError
 from .messages import IEvent
-from .registry import (
-    GuardMapping,
-    GuardMeta,
-    HandlerMapping,
-    ListenerMapping,
-    MessageRegistry,
-)
+from .registry import GuardMapping, HandlerMapping, ListenerMapping, MessageRegistry
 from .sink import IEventSink
 from .strategies import default_publish, default_send
 
@@ -47,6 +40,8 @@ class ManagerBase:
         handler = meta.handler
 
         if not meta.is_async:
+            # TODO: manage ThreadExecutor ourselves to allow config max worker
+            # by default is min(32, cpu_cores + 4)
             handler = partial(to_thread, cast(Any, handler))
 
         if isinstance(meta, MethodMeta):
@@ -65,7 +60,11 @@ class HandlerManager(ManagerBase):
         super().__init__(dg)
         self._handler_metas: dict[type, FuncMeta[Any]] = {}
         self._guard_mapping: GuardMapping = defaultdict(list)
-        self._global_guard: list[GuardMeta] = []
+        self._global_guards: list[GuardMeta] = []
+
+    @property
+    def global_guards(self):
+        return self._global_guards[:]
 
     def include_handlers(self, command_mapping: HandlerMapping[Any]):
         handler_mapping = {msg_type: meta for msg_type, meta in command_mapping.items()}
@@ -74,7 +73,7 @@ class HandlerManager(ManagerBase):
     def include_guards(self, guard_mapping: GuardMapping):
         for origin_target, guard_meta in guard_mapping.items():
             if origin_target is Any or origin_target is object:
-                self._global_guard.extend(guard_meta)
+                self._global_guards.extend(guard_meta)
             else:
                 self._guard_mapping[origin_target].extend(guard_meta)
 
@@ -85,7 +84,7 @@ class HandlerManager(ManagerBase):
         *,
         scope: AsyncScope,
     ) -> CommandHandler:
-        command_guards = self._global_guard + self._guard_mapping[msg_type]
+        command_guards = self._global_guards + self._guard_mapping[msg_type]
         if not command_guards:
             return handler
 
@@ -116,6 +115,9 @@ class HandlerManager(ManagerBase):
         else:
             return meta.handler
 
+    def get_guards(self, msg_type: type) -> list[IGuard | type[IGuard]]:
+        return [meta.guard for meta in self._guard_mapping[msg_type]]
+
     async def resolve_handler(self, msg_type: type, scope: AsyncScope):
         try:
             meta = self._handler_metas[msg_type]
@@ -139,6 +141,7 @@ class ListenerManager(ManagerBase):
             msg_type: [meta for meta in metas]
             for msg_type, metas in event_mapping.items()
         }
+
         for msg_type, metas in listener_mapping.items():
             if msg_type not in self._listener_metas:
                 self._listener_metas[msg_type] = metas
@@ -153,7 +156,7 @@ class ListenerManager(ManagerBase):
         else:
             return [meta.handler for meta in listener_metas]
 
-    #def replace_listener(self, msg_type: type, old, new):
+    # def replace_listener(self, msg_type: type, old, new):
     #    idx = self._listener_metas[msg_type].index(old)
     #    self._listener_metas[msg_type][idx] = FuncMeta.from_handler(msg_type, new)
 
@@ -182,17 +185,23 @@ class Inspect:
         self._hm = ref(handler_manager)
         self._lm = ref(listener_manager)
 
-    def __getitem__(self, key: type) -> CommandHandler | EventListeners | None:
-        hm, lm = self._hm(), self._lm()
-
-        if hm and (handler := hm.get_handler(key)):
-            return handler
-
-        if lm and (listeners := lm.get_listeners(key)):
+    def listeners(self, key: type) -> EventListeners | None:
+        if (lm := self._lm()) and (listeners := lm.get_listeners(key)):
             return listeners
 
-    # def guards(self, key: type):
-    #     ...
+    def handler(self, key: type) -> CommandHandler | None:
+        if (hm := self._hm()) and (handler := hm.get_handler(key)):
+            return handler
+
+    def guards(self, key: type) -> Sequence[IGuard | type[IGuard]]:
+        hm = self._hm()
+
+        if hm is None:
+            return []
+
+        global_guards = [meta.guard for meta in hm.global_guards]
+        command_guards = hm.get_guards(msg_type=key)
+        return global_guards + command_guards
 
 
 class Anywise:
@@ -228,7 +237,6 @@ class Anywise:
         publisher: PublishStrategy = default_publish,
     ):
         self._dg = dependency_graph or DependencyGraph()
-        # super().__init__(dependency_graph)
         self._handler_manager = HandlerManager(self._dg)
         self._listener_manager = ListenerManager(self._dg)
 
@@ -247,6 +255,13 @@ class Anywise:
     def publisher(self) -> PublishStrategy:
         return self._publisher
 
+    @property
+    def graph(self) -> DependencyGraph:
+        return self._dg
+
+    def reset_graph(self) -> None:
+        self._dg.reset(clear_nodes=True)
+
     # async def __enter__(self):
     #     """create an global scope and create resource"""
     #     # scope = self._dg.scope("anywise")
@@ -259,7 +274,7 @@ class Anywise:
     # ): ...
 
     def register(
-        self, message_type: type | None = None, registee: Registee | None = None
+        self, message_type: type | None = None, *registee: tuple[Registee, ...]
     ) -> None:
         """
         register a function, a class, a module, or a package.
@@ -278,9 +293,6 @@ class Anywise:
             listener_manager=self._listener_manager,
         )
 
-    def register_singleton(self, singleton: Any):
-        self._dg.register_singleton(singleton)
-
     def include(self, *registries: MessageRegistry[Any, Any]) -> None:
         for msg_registry in registries:
             self._dg.merge(msg_registry.graph)
@@ -292,26 +304,54 @@ class Anywise:
     def scope(self, name: str | None = None):
         return self._dg.scope(name)
 
-    async def send(self, msg: object, *, context: IContext | None = None) -> Any:
-        # TODO: msg, context, scope
-        scope_proxy = self._dg.use_scope("message", create_on_miss=True, as_async=True)
+    async def send(
+        self,
+        msg: object,
+        *,
+        context: IContext | None = None,
+        scope: AsyncScope | None = None,
+    ) -> Any:
+        if scope is None:
+            scope = await self._dg.scope("message").__aenter__()
 
-        async with scope_proxy as scope:
-            handler = await self._handler_manager.resolve_handler(type(msg), scope)
-            return await self._sender(msg, context, handler)
+        handler = await self._handler_manager.resolve_handler(type(msg), scope)
+        return await self._sender(msg, context, handler)
 
     async def publish(
-        self, msg: object, *, context: IEventContext | None = None
+        self,
+        msg: object,
+        *,
+        context: IEventContext | None = None,
+        scope: AsyncScope | None = None,
     ) -> None:
-        scope_proxy = self._dg.use_scope("message", create_on_miss=True, as_async=True)
+        if scope is None:
+            scope = await self._dg.scope("message").__aenter__()
 
-        async with scope_proxy as scope:
-            resolved_listeners = await self._listener_manager.resolve_listeners(
-                type(msg), scope=scope
-            )
-            return await self._publisher(msg, context, resolved_listeners)
+        resolved_listeners = await self._listener_manager.resolve_listeners(
+            type(msg), scope=scope
+        )
+        return await self._publisher(msg, context, resolved_listeners)
+
+    # def add_task[
+    #     **P, R
+    # ](
+    #     self,
+    #     task_func: Callable[P, R] | Callable[P, Coroutine[None, None, R]],
+    #     *args: P.args,
+    #     **kwargs: P.kwargs,
+    # ):
+    #     # if kwargs:
+    #     #     task_func = partial(task_func, **kwargs)
+
+    #     if iscoroutinefunction(task_func):
+    #         # self._tg.create_task
+    #         t = create_task(task_func(*args, **kwargs))
+    #         t.add_done_callback()
+
+    #     # self.loop.call_soon(task_func, *args)
 
     async def sink(self, event: Any):
-        if self._sink is None:
-            raise Exception("sink is not set")
-        await self._sink.sink(event)
+        try:
+            await self._sink.sink(event)  # type: ignore
+        except AttributeError:
+            raise SinkUnsetError()

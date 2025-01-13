@@ -1,8 +1,25 @@
+"""
+- send_strategy: `Callable[[Any, MutableMapping[Any, Any], CommandHandler], Any]`
+
+    ```py
+    async def sender(msg: Any, context: dict[Any, Any], handler: CommandHandler) -> Any:
+        await handler(msg, context)
+    ```
+
+- publish_strategy: `Callable[[Any, Mapping[Any, Any], EventListeners], Awaitable[None]]`
+
+    ```py
+    async def publisher(msg: Any, context: Mapping[Any, Any], listeners: EventListeners)->None:
+        for listener in listeners:
+            await listener(msg, context)
+    ```
+"""
+
 from asyncio import TaskGroup
 from types import MappingProxyType
 from typing import Any, Awaitable, Callable
 
-from ._itypes import EventListeners, IContext, IEventContext
+from .Interface import EventListeners, IContext, IEventContext
 
 
 async def default_send(

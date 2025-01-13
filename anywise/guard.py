@@ -1,8 +1,8 @@
 from abc import ABC
 from typing import Any
 
-from ._itypes import GuardFunc, IContext, PostHandle
 from .errors import DunglingGuardError
+from .Interface import GuardFunc, IContext, PostHandle
 
 """
 class AuthContext(TypedDict):
