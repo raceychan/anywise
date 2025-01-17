@@ -7,9 +7,13 @@ from typing import (
     AsyncGenerator,
     Awaitable,
     Callable,
+    Final,
+    Literal,
     Mapping,
     MutableMapping,
     Protocol,
+    Sequence,
+    TypeGuard,
 )
 
 type IContext = dict[Any, Any]
@@ -18,12 +22,12 @@ type PostHandle[R] = Callable[[Any, IContext, R], Awaitable[R]]
 type IEventContext = Mapping[Any, Any]
 
 
-type CommandHandler = Callable[[Any, IContext], Any] | IGuard
-type EventListener = Callable[[Any, IEventContext], Any]
-type EventListeners = list[EventListener]
-type SendStrategy = Callable[[Any, IContext | None, CommandHandler], Any]
-type PublishStrategy = Callable[
-    [Any, IEventContext | None, EventListeners], Awaitable[None]
+type CommandHandler[C] = Callable[[C, IContext], Any] | IGuard
+type EventListener[E] = Callable[[E, IEventContext], Any]
+type EventListeners[E] = Sequence[EventListener[E]]
+type SendStrategy[C] = Callable[[C, IContext | None, CommandHandler[C]], Any]
+type PublishStrategy[E] = Callable[
+    [Any, IEventContext | None, EventListeners[E]], Awaitable[None]
 ]
 
 type LifeSpan = Callable[..., AsyncGenerator[Any, None]]
@@ -34,7 +38,7 @@ CTX_MARKER = "__anywise_context__"
 type Context[M: MutableMapping[Any, Any]] = Annotated[M, CTX_MARKER]
 type FrozenContext[M: Mapping[Any, Any]] = Annotated[M, CTX_MARKER]
 
-type Registee = IPackage | ModuleType | type | CommandHandler | EventListener
+type Registee = IPackage | ModuleType | type | CommandHandler[Any] | EventListener[Any]
 
 
 class IPackage(Protocol):
@@ -74,3 +78,23 @@ def signup_user(command: CreateUser) -> Result[User, SignupError]:
     return user
 ```
 """
+
+
+class _Missed:
+
+    def __str__(self) -> str:
+        return "MISSING"
+
+    def __bool__(self) -> Literal[False]:
+        return False
+
+
+Missed: Final[type[_Missed]] = _Missed
+MISSING = _Missed()
+
+
+type Maybe[T] = T | _Missed
+
+
+def is_provided[T](obj: Maybe[T]) -> TypeGuard[T]:
+    return obj is not MISSING

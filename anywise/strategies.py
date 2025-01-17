@@ -17,24 +17,23 @@
 
 from asyncio import TaskGroup
 from types import MappingProxyType
-from typing import Any, Awaitable, Callable
+from typing import Any
 
-from .Interface import EventListeners, IContext, IEventContext
+from .Interface import CommandHandler, EventListeners, IContext, IEventContext
 
 
-async def default_send(
-    message: Any, context: IContext | None, handler: Callable[[Any, IContext], Any]
-) -> Any:
+async def default_send[
+    C
+](message: C, context: IContext | None, handler: CommandHandler[C]) -> Any:
     if context is None:
         context = dict()
     return await handler(message, context)
 
 
-async def default_publish(
-    message: Any,
-    context: IEventContext | None,
-    listeners: list[Callable[[Any, IEventContext], Awaitable[None]]],
-) -> None:
+# TODO: dependency injection, maybe sink here?
+async def default_publish[
+    E
+](message: E, context: IEventContext | None, listeners: EventListeners[E],) -> None:
     if context is None:
         context = MappingProxyType({})
 
@@ -42,9 +41,9 @@ async def default_publish(
         await listener(message, context)
 
 
-async def concurrent_publish(
-    msg: Any, context: IEventContext | None, subscribers: EventListeners
-) -> None:
+async def concurrent_publish[
+    E
+](msg: E, context: IEventContext | None, subscribers: EventListeners[E]) -> None:
     if not context:
         context = {}
     async with TaskGroup() as tg:

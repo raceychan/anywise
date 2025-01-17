@@ -65,7 +65,7 @@ class NormalizedEvent(TypedDict):
     entity_id: str
     timestamp: str
 
-    # current only fields
+    # current fields
     event_body: dict[str, Any]
 
 

@@ -1,9 +1,10 @@
 import inspect
 from collections import defaultdict
 from functools import partial
-from typing import Any, Callable, Final, Literal, TypeGuard, Unpack, cast, overload
+from typing import Any, Callable, Unpack, cast, overload
 
-from ididi import DependencyGraph, INode, INodeConfig
+from ididi import Graph, INode, INodeConfig
+from ididi.interfaces import TDecor
 
 from ._ds import FuncMeta, GuardMeta, HandlerMapping, ListenerMapping, MethodMeta
 from ._visitor import Target, gather_types
@@ -14,29 +15,9 @@ from .errors import (
     NotSupportedHandlerTypeError,
 )
 from .guard import BaseGuard, Guard, GuardFunc, PostHandle
-from .Interface import CTX_MARKER, Context, FrozenContext, IGuard
+from .Interface import CTX_MARKER, MISSING, Context, FrozenContext, IGuard, Maybe
 
 type GuardMapping = defaultdict[type, list[GuardMeta]]
-
-
-class _Missed:
-
-    def __str__(self) -> str:
-        return "MISSING"
-
-    def __bool__(self) -> Literal[False]:
-        return False
-
-
-Missed: Final[type[_Missed]] = _Missed
-MISSING = _Missed()
-
-
-type Maybe[T] = T | _Missed
-
-
-def is_provided[T](obj: Maybe[T]) -> TypeGuard[T]:
-    return obj is not MISSING
 
 
 IGNORE_TYPES = (Context, FrozenContext)
@@ -56,8 +37,7 @@ def is_contextparam(param: list[inspect.Parameter]) -> bool:
     return CTX_MARKER in metas
 
 
-def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any]]:
-    # TODO?: make this a class function of FuncMeta
+def get_funcmetas[C](msg_base: type[C], func: Callable[..., Any]) -> list[FuncMeta[C]]:
     params = inspect.Signature.from_callable(func).parameters.values()
     if not params:
         raise MessageHandlerNotFoundError(msg_base, func)
@@ -74,12 +54,12 @@ def get_funcmetas(msg_base: type, func: Callable[..., Any]) -> list[FuncMeta[Any
     ignore = tuple(derived_msgtypes) + IGNORE_TYPES
 
     metas = [
-        FuncMeta[Any](
+        FuncMeta[C](
             message_type=t,
             handler=func,
             is_async=is_async,
             is_contexted=is_contexted,
-            ignore=ignore,  # type: ignore
+            ignore=ignore,
         )
         for t in derived_msgtypes
     ]
@@ -131,8 +111,8 @@ class MessageRegistry[C, E]:
         self,
         *,
         command_base: type[C],
-        event_base: type[E] = Missed,
-        graph: Maybe[DependencyGraph] = MISSING,
+        event_base: type[E] = type(MISSING),
+        graph: Maybe[Graph] = MISSING,
     ) -> None: ...
 
     @overload
@@ -140,8 +120,8 @@ class MessageRegistry[C, E]:
         self,
         *,
         event_base: type[E],
-        command_base: type[C] = Missed,
-        graph: Maybe[DependencyGraph] = MISSING,
+        command_base: type[C] = type(MISSING),
+        graph: Maybe[Graph] = MISSING,
     ) -> None: ...
 
     def __init__(
@@ -149,15 +129,27 @@ class MessageRegistry[C, E]:
         *,
         command_base: Maybe[type[C]] = MISSING,
         event_base: Maybe[type[E]] = MISSING,
-        graph: Maybe[DependencyGraph] = MISSING,
+        graph: Maybe[Graph] = MISSING,
     ):
         self._command_base = command_base
         self._event_base = event_base
-        self._graph = graph or DependencyGraph()
+        self._graph = graph or Graph()
 
         self.command_mapping: HandlerMapping[Any] = {}
         self.event_mapping: ListenerMapping[Any] = {}
         self.guard_mapping: GuardMapping = defaultdict(list)
+
+    @property
+    def graph(self) -> Graph:
+        return self._graph
+
+    @property
+    def command_base(self) -> Maybe[type[C]]:
+        return self._command_base
+
+    @property
+    def event_base(self) -> Maybe[type[E]]:
+        return self._event_base
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(command_base={self._command_base}, event_base={self._event_base})"
@@ -173,19 +165,13 @@ class MessageRegistry[C, E]:
     ](self, handler: type[R] | Callable[P, R]) -> type[R] | Callable[P, R]:
         return self._register(handler)
 
-    @property
-    def graph(self) -> DependencyGraph:
-        return self._graph
-
     @overload
-    def factory(self, **config: Unpack[INodeConfig]) -> INode[..., Any]: ...
+    def factory(self, **config: Unpack[INodeConfig]) -> TDecor: ...
 
     @overload
     def factory[
         **P, R
-    ](self, factory: INode[P, R] | None = None, **config: Unpack[INodeConfig]) -> INode[
-        P, R
-    ]: ...
+    ](self, factory: INode[P, R], **config: Unpack[INodeConfig]) -> INode[P, R]: ...
 
     def factory[
         **P, R
@@ -271,14 +257,18 @@ class MessageRegistry[C, E]:
                 self.post_handle(post_handle)
 
     def get_guardtarget(self, func: Callable[..., Any]) -> set[type]:
+
         if inspect.isclass(func):
-            func_params = list(inspect.signature(func.__call__).parameters.values())
-            cmd_type = func_params[1].annotation
+            func_params = list(inspect.signature(func.__call__).parameters.values())[1:]
         elif inspect.isfunction(func):
             func_params = list(inspect.signature(func).parameters.values())
-            cmd_type = func_params[0].annotation
         else:
             raise MessageHandlerNotFoundError(self._command_base, func)
+
+        if not func_params:
+            raise MessageHandlerNotFoundError(self._command_base, func)
+
+        cmd_type = func_params[0].annotation
 
         return gather_types(cmd_type)
 

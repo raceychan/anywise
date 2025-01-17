@@ -78,13 +78,15 @@ class HandlerManager(ManagerBase):
             else:
                 self._guard_mapping[origin_target].extend(guard_meta)
 
-    async def _chain_guards(
+    async def _chain_guards[
+        C
+    ](
         self,
-        msg_type: Any,
+        msg_type: type[C],
         handler: Callable[..., Any],
         *,
         scope: AsyncScope,
-    ) -> CommandHandler:
+    ) -> CommandHandler[C]:
         command_guards = self._global_guards + self._guard_mapping[msg_type]
         if not command_guards:
             return handler
@@ -108,7 +110,7 @@ class HandlerManager(ManagerBase):
         ptr.chain_next(handler)
         return head
 
-    def get_handler(self, msg_type: type) -> CommandHandler | None:
+    def get_handler[C](self, msg_type: type[C]) -> CommandHandler[C] | None:
         try:
             meta = self._handler_metas[msg_type]
         except KeyError:
@@ -119,7 +121,7 @@ class HandlerManager(ManagerBase):
     def get_guards(self, msg_type: type) -> list[IGuard | type[IGuard]]:
         return [meta.guard for meta in self._guard_mapping[msg_type]]
 
-    async def resolve_handler(self, msg_type: type, scope: AsyncScope):
+    async def resolve_handler[C](self, msg_type: type[C], scope: AsyncScope):
         try:
             meta = self._handler_metas[msg_type]
         except KeyError:
@@ -149,7 +151,7 @@ class ListenerManager(ManagerBase):
             else:
                 self._listener_metas[msg_type].extend(metas)
 
-    def get_listeners(self, msg_type: type) -> EventListeners:
+    def get_listeners[E](self, msg_type: type[E]) -> EventListeners[E]:
         try:
             listener_metas = self._listener_metas[msg_type]
         except KeyError:
@@ -161,9 +163,9 @@ class ListenerManager(ManagerBase):
     #    idx = self._listener_metas[msg_type].index(old)
     #    self._listener_metas[msg_type][idx] = FuncMeta.from_handler(msg_type, new)
 
-    async def resolve_listeners(
-        self, msg_type: type, *, scope: AsyncScope
-    ) -> EventListeners:
+    async def resolve_listeners[
+        E
+    ](self, msg_type: type[E], *, scope: AsyncScope) -> EventListeners[E]:
         try:
             listener_metas = self._listener_metas[msg_type]
         except KeyError:
@@ -186,11 +188,11 @@ class Inspect:
         self._hm = ref(handler_manager)
         self._lm = ref(listener_manager)
 
-    def listeners(self, key: type) -> EventListeners | None:
+    def listeners[E](self, key: type[E]) -> EventListeners[E] | None:
         if (lm := self._lm()) and (listeners := lm.get_listeners(key)):
             return listeners
 
-    def handler(self, key: type) -> CommandHandler | None:
+    def handler[C](self, key: type[C]) -> CommandHandler[C] | None:
         if (hm := self._hm()) and (handler := hm.get_handler(key)):
             return handler
 
@@ -226,16 +228,13 @@ class Anywise:
         ```
     """
 
-    _sender: SendStrategy
-    _publisher: PublishStrategy
-
     def __init__(
         self,
         *registries: MessageRegistry[Any, Any],
         graph: Graph | None = None,
         sink: IEventSink[IEvent] | None = None,
-        sender: SendStrategy = default_send,
-        publisher: PublishStrategy = default_publish,
+        sender: SendStrategy[Any] = default_send,
+        publisher: PublishStrategy[IEvent] = default_publish,
     ):
         self._dg = graph or Graph()
         self._handler_manager = HandlerManager(self._dg)
@@ -249,11 +248,11 @@ class Anywise:
         self._dg.register_singleton(self)
 
     @property
-    def sender(self) -> SendStrategy:
+    def sender(self) -> SendStrategy[Any]:
         return self._sender
 
     @property
-    def publisher(self) -> PublishStrategy:
+    def publisher(self) -> PublishStrategy[IEvent]:
         return self._publisher
 
     @property
@@ -320,7 +319,7 @@ class Anywise:
 
     async def publish(
         self,
-        msg: object,
+        msg: IEvent,
         *,
         context: IEventContext | None = None,
         scope: AsyncScope | None = None,

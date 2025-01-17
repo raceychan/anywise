@@ -38,7 +38,7 @@ async def test_sink_event(user_created: UserCreated):
     assert sink.queue.qsize() == 1
 
 
-async def test_sink_multiple_event(user_created: UserCreated):
+async def test_sink_multiple_event():
     sink = InMemorySink[IEvent]()
     aw = Anywise(reg, sink=sink)
     events = [

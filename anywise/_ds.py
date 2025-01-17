@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from ididi.interfaces import GraphIgnore
 from .Interface import IGuard
 
 type HandlerMapping[Command] = dict[type[Command], "FuncMeta[Command]"]
@@ -19,7 +20,7 @@ class FuncMeta[Message]:
     handler: Callable[..., Any] 
     is_async: bool
     is_contexted: bool
-    ignore: tuple[str | type, ...]
+    ignore: GraphIgnore
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

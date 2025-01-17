@@ -1,7 +1,12 @@
 import pytest
 
-from anywise import Anywise, MessageRegistry
-from anywise.errors import InvalidHandlerError
+from anywise import Anywise, MessageRegistry, use
+from anywise.errors import (
+    InvalidHandlerError,
+    MessageHandlerNotFoundError,
+    NotSupportedHandlerTypeError,
+)
+from anywise.Interface import is_provided
 from anywise.registry import get_funcmetas, get_methodmetas
 from tests.conftest import (
     CreateUser,
@@ -16,8 +21,18 @@ from tests.conftest import (
 user_message_registry = MessageRegistry(event_base=UserEvent, command_base=UserCommand)
 
 
-async def react_to_event(event: UserCreated | UserNameUpdated) -> None:
-    print(f"handling {event=}")
+class Database: ...
+
+
+@user_message_registry.factory(reuse=False)
+def db_factory() -> Database:
+    return Database()
+
+
+async def react_to_event(
+    event: UserCreated | UserNameUpdated, db: Database = use(db_factory)
+) -> None:
+    assert isinstance(db, Database)
 
 
 async def random_func(cmd: str): ...
@@ -44,6 +59,13 @@ def test_message_registry():
     user_message_registry.register(react_to_event, UserService)
     assert user_message_registry.event_mapping[UserNameUpdated]
     assert user_message_registry.command_mapping[CreateUser]
+    user_message_registry.__repr__()
+
+
+def test_unempty_msgreg():
+    msg = MessageRegistry(command_base=str)
+    assert is_provided(msg.command_base)
+    assert not is_provided(msg.event_base)
 
 
 def test_message_register_fail():
@@ -58,9 +80,34 @@ async def update_user(cmd: UpdateUser | CreateUser) -> str:
 def test_invalid_handler():
 
     def test(name: str): ...
+    def test2(): ...
 
     with pytest.raises(InvalidHandlerError):
         get_funcmetas(UserCommand, test)
+
+    with pytest.raises(MessageHandlerNotFoundError):
+        get_funcmetas(UserCommand, test2)
+
+
+def test_register_invalid_handler():
+    with pytest.raises(NotSupportedHandlerTypeError):
+        user_message_registry(pytest)
+
+    r = MessageRegistry(event_base=str)
+    with pytest.raises(NotSupportedHandlerTypeError):
+        r(pytest)
+
+
+def test_invalid_guard():
+    mr = MessageRegistry(command_base=str)
+
+    def test(): ...
+
+    with pytest.raises(MessageHandlerNotFoundError):
+        mr.pre_handle(test)
+
+    with pytest.raises(MessageHandlerNotFoundError):
+        mr.pre_handle(pytest)
 
 
 class HelloService:
