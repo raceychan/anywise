@@ -5,7 +5,7 @@ from types import MethodType
 from typing import Any, Callable, Sequence, cast
 from weakref import ref
 
-from ididi import AsyncScope, DependencyGraph
+from ididi import AsyncScope, Graph
 
 from ._ds import FuncMeta, GuardMeta, MethodMeta
 from .errors import SinkUnsetError, UnregisteredMessageError
@@ -33,7 +33,7 @@ def context_wrapper(origin: Callable[[Any], Any]):
 
 
 class ManagerBase:
-    def __init__(self, dg: DependencyGraph):
+    def __init__(self, dg: Graph):
         self._dg = dg
 
     async def _resolve_meta(self, meta: "FuncMeta[Any]", *, scope: AsyncScope):
@@ -48,6 +48,7 @@ class ManagerBase:
             instance = await scope.resolve(meta.owner_type)
             handler = MethodType(handler, instance)
         else:
+            # TODO: EntryFunc
             handler = self._dg.entry(ignore=meta.ignore)(handler)
 
         if not meta.is_contexted:
@@ -56,7 +57,7 @@ class ManagerBase:
 
 
 class HandlerManager(ManagerBase):
-    def __init__(self, dg: DependencyGraph):
+    def __init__(self, dg: Graph):
         super().__init__(dg)
         self._handler_metas: dict[type, FuncMeta[Any]] = {}
         self._guard_mapping: GuardMapping = defaultdict(list)
@@ -132,7 +133,7 @@ class HandlerManager(ManagerBase):
 
 
 class ListenerManager(ManagerBase):
-    def __init__(self, dg: DependencyGraph):
+    def __init__(self, dg: Graph):
         super().__init__(dg)
         self._listener_metas: dict[type, list[FuncMeta[Any]]] = dict()
 
@@ -231,12 +232,12 @@ class Anywise:
     def __init__(
         self,
         *registries: MessageRegistry[Any, Any],
-        dependency_graph: DependencyGraph | None = None,
+        graph: Graph | None = None,
         sink: IEventSink[IEvent] | None = None,
         sender: SendStrategy = default_send,
         publisher: PublishStrategy = default_publish,
     ):
-        self._dg = dependency_graph or DependencyGraph()
+        self._dg = graph or Graph()
         self._handler_manager = HandlerManager(self._dg)
         self._listener_manager = ListenerManager(self._dg)
 
@@ -256,7 +257,7 @@ class Anywise:
         return self._publisher
 
     @property
-    def graph(self) -> DependencyGraph:
+    def graph(self) -> Graph:
         return self._dg
 
     def reset_graph(self) -> None:
@@ -299,7 +300,7 @@ class Anywise:
             self._handler_manager.include_handlers(msg_registry.command_mapping)
             self._handler_manager.include_guards(msg_registry.guard_mapping)
             self._listener_manager.include_listeners(msg_registry.event_mapping)
-        self._dg.static_resolve_all()
+        self._dg.analyze_nodes()
 
     def scope(self, name: str | None = None):
         return self._dg.scope(name)

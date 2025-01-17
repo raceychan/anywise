@@ -16,7 +16,7 @@ class FuncMeta[Message]:
     """
 
     message_type: type[Message]
-    handler: Callable[..., Any]
+    handler: Callable[..., Any] 
     is_async: bool
     is_contexted: bool
     ignore: tuple[str | type, ...]

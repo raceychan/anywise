@@ -3,7 +3,15 @@ from typing import Mapping
 
 import pytest
 
-from anywise import Context, FrozenContext, Ignore
+from anywise import (
+    Anywise,
+    Context,
+    FrozenContext,
+    Ignore,
+    MessageRegistry,
+    concurrent_publish,
+    use,
+)
 from anywise.anywise import (
     Anywise,
     ListenerManager,
@@ -13,6 +21,15 @@ from anywise.anywise import (
     default_send,
 )
 from anywise.errors import SinkUnsetError, UnregisteredMessageError
+from tests.conftest import (
+    CreateUser,
+    RemoveUser,
+    UpdateUser,
+    UserCommand,
+    UserCreated,
+    UserEvent,
+    UserNameUpdated,
+)
 
 
 async def handler(msg: str, ctx: Context[dict[str, str]]) -> str:
@@ -200,3 +217,74 @@ async def test_aw_handle_event():
     aw = Anywise(mr1, mr2)
     aw.graph.register_singleton(service)
     await aw.publish(UserCreated("user"))
+
+
+user_message_registry = MessageRegistry(event_base=UserEvent, command_base=UserCommand)
+
+
+@user_message_registry
+class UserService:
+    def __init__(self, name: str = "test", *, anywise: Anywise):
+        self.name = name
+        self._aw = anywise
+
+    async def create_user(self, cmd: CreateUser) -> str:
+        assert self.name == "test"
+        return "hello"
+
+    async def remove_user(self, cmd: RemoveUser) -> str:
+        assert self.name == "test"
+        return "goodbye"
+
+    def hello(self) -> str:
+        return "hello"
+
+
+def user_service_factory(asynwise: Anywise) -> "UserService":
+    return UserService(name="test", anywise=asynwise)
+
+
+@user_message_registry
+async def update_user(
+    cmd: UpdateUser,
+    anywise: Anywise,
+    service: UserService = use(user_service_factory),
+) -> str:
+    assert service.hello() == "hello"
+    await anywise.publish(UserNameUpdated(cmd.new_name))
+    return "ok"
+
+
+@user_message_registry
+async def react_to_event(
+    event: UserCreated | UserNameUpdated,
+    service: UserService = use(user_service_factory),
+) -> None:
+    print(f"handling {event=}")
+
+
+@pytest.fixture(scope="module")
+def asynwise() -> Anywise:
+    aw = Anywise(user_message_registry, publisher=concurrent_publish)
+    return aw
+
+
+async def test_send_to_method(asynwise: Anywise):
+    cmd = CreateUser("1", "user")
+    res = await asynwise.send(cmd)
+    assert res == "hello"
+
+    rm_cmd = RemoveUser("1", "user")
+    res = await asynwise.send(rm_cmd)
+    assert res == "goodbye"
+
+
+async def test_send_to_function(asynwise: Anywise):
+    cmd = UpdateUser("1", "user", "new")
+    res = await asynwise.send(cmd)
+    assert res == "ok"
+
+
+async def test_event_handler(asynwise: Anywise):
+    event = UserCreated("new_name")
+    await asynwise.publish(event)

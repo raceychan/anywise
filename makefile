@@ -1,6 +1,6 @@
 .PHONY: test
 test:
-	uv run pytest tests/
+	uv run pytest tests/ 
 
 .PHONY: feat
 feat:

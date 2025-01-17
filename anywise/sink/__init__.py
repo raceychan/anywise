@@ -45,13 +45,15 @@ class IEventSink[EventType](Protocol):
     #     ...
 
 
-
 class InMemorySink[EventType](IEventSink[EventType]):
     def __init__(self, volume: int = 100):
         self._queue = Queue[IEvent](volume)
 
+    @property
+    def queue(self):
+        return self._queue
+
     async def sink(self, event: IEvent | Sequence[IEvent]):
-        print(f"logging {event}")
         if isinstance(event, Sequence):
             for e in event:
                 await self._queue.put(e)

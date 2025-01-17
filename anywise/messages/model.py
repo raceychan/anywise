@@ -4,7 +4,6 @@ from typing import Any, ClassVar, Final, Protocol, Self, Sequence, TypedDict, ca
 from uuid import uuid4
 
 __EventTypeRegistry__: Final[dict[str, type]] = {}
-
 # TODO: rename to folder message
 # add a Command Model, with type registry
 
@@ -70,6 +69,8 @@ class NormalizedEvent(TypedDict):
     event_body: dict[str, Any]
 
 
+Event = None
+
 try:
     from msgspec import Struct
 except ImportError:
@@ -78,7 +79,7 @@ else:
 
     from msgspec import field as msgspec_field
 
-    class Event(Struct, frozen=True, kw_only=True):
+    class MsgSpecEvent(Struct, frozen=True, kw_only=True):
         __source__: ClassVar[str] = "unspecified"  # project name, like demo
         __version__: ClassVar[str] = "1"  # specversion
 
@@ -92,7 +93,7 @@ else:
             return deafult_typeid(cls)
 
         def __normalized__(self) -> NormalizedEvent:
-            base_fields = Event.__struct_fields__
+            base_fields = MsgSpecEvent.__struct_fields__
             current_only_fields = self.__struct_fields__[: -len(base_fields)]
 
             mapping = {f: getattr(self, f) for f in base_fields}
@@ -126,77 +127,84 @@ else:
 
             return self
 
+    Event = MsgSpecEvent
 
-# try:
-#     from pydantic import BaseModel, ConfigDict, Field
 
-# except ImportError:
-#     pass
-# else:
+try:
+    from pydantic import BaseModel, ConfigDict, Field
+except ImportError:
+    pass
+else:
 
-#     class PydanticEvent(BaseModel):
-#         __source__: ClassVar[str] = "unspecified"  # project name, like demo
-#         __version__: ClassVar[str] = "1"  # specversion
+    class PydanticEvent(BaseModel):
+        __source__: ClassVar[str] = "unspecified"  # project name, like demo
+        __version__: ClassVar[str] = "1"  # specversion
 
-#         entity_id: str
-#         event_id: str = Field(default_factory=uuid_factory)
-#         timestamp: str = Field(default_factory=utc_now)
+        entity_id: str
+        event_id: str = Field(default_factory=uuid_factory)
+        timestamp: str = Field(default_factory=utc_now)
 
-#         model_config = ConfigDict(frozen=True)
+        model_config = ConfigDict(frozen=True)
 
-#         @classmethod
-#         def __type_id__(cls) -> str:
-#             "generate a unique id for event type, e.g. 'demo.domain.event:UserCreated', if class is renamed make sure to update this method"
-#             return deafult_typeid(cls)
+        @classmethod
+        def __type_id__(cls) -> str:
+            "generate a unique id for event type, e.g. 'demo.domain.event:UserCreated', if class is renamed make sure to update this method"
+            return deafult_typeid(cls)
 
-#         def __normalized__(self) -> NormalizedEvent:
-#             base_fields = PydanticEvent.__pydantic_fields__.keys()
-#             current_only_fields = list(self.__pydantic_fields__.keys())[
-#                 : -len(base_fields)
-#             ]
+        def __normalized__(self) -> NormalizedEvent:
+            base_fields = PydanticEvent.__pydantic_fields__.keys()
+            current_only_fields = list(self.__pydantic_fields__.keys())[
+                : -len(base_fields)
+            ]
 
-#             mapping = {f: getattr(self, f) for f in base_fields}
-#             event_body = {f: getattr(self, f) for f in current_only_fields}
+            mapping = {f: getattr(self, f) for f in base_fields}
+            event_body = {f: getattr(self, f) for f in current_only_fields}
 
-#             mapping["event_type"] = deafult_typeid(self.__class__)
-#             mapping["version"] = self.__version__
-#             mapping["source"] = self.__source__
-#             mapping["event_body"] = event_body
-#             return cast(NormalizedEvent, mapping)
+            mapping["event_type"] = deafult_typeid(self.__class__)
+            mapping["version"] = self.__version__
+            mapping["source"] = self.__source__
+            mapping["event_body"] = event_body
+            return cast(NormalizedEvent, mapping)
 
-#     class PydanticEntity(BaseModel):
-#         entity_id: str
+    class PydanticEntity(BaseModel):
+        entity_id: str
 
-#         @singledispatchmethod
-#         @classmethod
-#         def apply(cls, event: PydanticEvent) -> "Self":
-#             raise NotImplementedError
+        @singledispatchmethod
+        @classmethod
+        def apply(cls, event: PydanticEvent) -> "Self":
+            raise NotImplementedError
 
-#         @apply.register
-#         def _(self, _: object) -> "Self":
-#             raise NotImplementedError
+        @apply.register
+        def _(self, _: object) -> "Self":
+            raise NotImplementedError
 
-#         @classmethod
-#         def rebuild(cls, events: Sequence[PydanticEvent]) -> "Self":
-#             create, rest = events[0], events[1:]
-#             self = cls.apply(create)
+        @classmethod
+        def rebuild(cls, events: Sequence[PydanticEvent]) -> "Self":
+            create, rest = events[0], events[1:]
+            self = cls.apply(create)
 
-#             for e in rest:
-#                 self.apply(e)
+            for e in rest:
+                self.apply(e)
 
-#             return self
+            return self
+
+    Event = PydanticEvent
+
 
 # TODO: dataclass version
+if Event is None:
+    raise Exception
 
 
-def get_event_cls(event_type_id: str) -> type["IEvent"]:
+def get_event_cls(
+    event_type_id: str, event_cls: type[IEvent] = Event
+) -> type["IEvent"]:
     try:
         return __EventTypeRegistry__[event_type_id]
     except KeyError:
         __EventTypeRegistry__.update(
-            {cls.__type_id__(): cls for cls in all_subclasses(Event)}
+            {cls.__type_id__(): cls for cls in all_subclasses(event_cls)}
         )
-        # if fail again just raise
 
     try:
         return __EventTypeRegistry__[event_type_id]
